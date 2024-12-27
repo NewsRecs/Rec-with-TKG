@@ -64,12 +64,12 @@ class NewsEncoder(torch.nn.Module):
 
         # batch_size, num_words_title, word_embedding_dim
         ### title에 포함된 단어들을 embedding 벡터로 변환
-        title_vector = self.word_embedding(news_indices)   # (num of words, dim of word embedding)
-        title_vector = title_vector.unsqueeze(0)  # (1, 3, 100)  -> 배치 차원 추가
+        # title_vector = self.word_embedding(news_indices)   # (num of words, dim of word embedding)
+        # title_vector = title_vector.unsqueeze(0)  # (1, 3, 100)  -> 배치 차원 추가
 
-        # title_vector = F.dropout(self.word_embedding(news_indices),
-        #                          p=self.config.dropout_probability,
-        #                          training=self.training)
+        title_vector = F.dropout(self.word_embedding(news_indices),
+                                 p=self.config.dropout_probability,
+                                 training=self.training).unsqueeze(0)
         # batch_size, num_filters, num_words_title
         ### title embedding 벡터에 CNN 적용하여 문맥 정보 학습
         convoluted_title_vector = self.title_CNN(
