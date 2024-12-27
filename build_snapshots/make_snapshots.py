@@ -103,6 +103,7 @@ df[['Category', 'Subcategory']] = df['category'].str.split('|', n=1, expand=True
 # Period_Start로 그룹화 - 즉, 각 행이 snapshot이 됨
 grouped = df.groupby('Period_Start')
 
+
 # news_info 생성 - NewsEncoder 실행을 위해
 # 뉴스별로 카테고리, 서브카테고리, 제목 단어 리스트를 추출
 news_info = df.groupby('clicked_news').agg({
@@ -110,6 +111,7 @@ news_info = df.groupby('clicked_news').agg({
     'Subcategory': 'first',
     'title': 'first'
 }).reset_index()
+
 
 
 
@@ -301,12 +303,22 @@ news_map_df.to_csv(news_map_path, sep='\t', index=False, encoding='utf-8')
 # 9. 스냅샷 정보 저장
 snapshot_info_list = []
 
-for period_start, group in tqdm(grouped, desc="Processing Groups"):
+
+for period_start, group in tqdm(grouped, desc="Processing Groups' infos"):
+    # news 당 클릭 수
+    group_user_info = group.groupby('history_user').agg({
+        'clicked_news': lambda x: list(x)  # 각 그룹의 history_user를 리스트로 집계
+    }).reset_index()
+    group_user_info['# of clicks'] = group_user_info['clicked_news'].apply(len)  # 리스트 길이를 계산
+
     # 스냅샷 정보 저장
     snapshot_info_list.append({
         'Period_Start': period_start,
-        'Unique_Users': len(group['history_user'].unique()),
-        'Unique_News': len(group['clicked_news'].unique())
+        'User_Nodes_Num': len(group['history_user'].unique()),
+        'News_Nodes_Num': len(group['clicked_news'].unique()),
+        'Edges_Num': len(group['history_user']),
+        'Avg.#_Clicks_per_User': group_user_info['# of clicks'].mean(),
+        'Category_Edges_Num': len(group['Category'].unique())
     })
 
 # 스냅샷 정보 데이터프레임 생성
