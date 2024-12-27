@@ -100,12 +100,4 @@ class NewsEncoder(torch.nn.Module):
         
         return news_vector
 
-# news_list = ['N113', 'N12', 'N570', 'N97', 'N97']    
-# # news_list.sort(key=lambda x: int(x[1:]))
-# print(news_list.unique())
 
-# import pandas as pd
-# file_path = './Adressa_4w/history/history_tkg_behaviors.tsv'  
-# df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
-# news = df['clicked_news'].unique()
-# print(news[:33])
