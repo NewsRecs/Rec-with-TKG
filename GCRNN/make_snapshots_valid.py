@@ -198,6 +198,7 @@ def main():
         edge_cats_snapshot = group['category'].map(cat2idx).values  # 각 클릭의 카테고리 인덱스
         # edge_cats = [i for i, n in enumerate(edge_cats_snapshot)]
 
+        # 바뀐 부분--------------------------------------------------------
         snapshot_user_ids = group['history_user'].unique()
         snapshot_news_ids = group['clicked_news'].unique()
         
@@ -232,6 +233,8 @@ def main():
         g.edges['clicked'].data['feat'] = edge_cat_embeddings
         g.edges['clicked_reverse'].data['feat'] = edge_cat_embeddings
 
+        # 바뀐 부분 여기까지------------------------------------------------------------------------
+        
         # 4.2.5) 검증
         if g.number_of_edges(('user', 'clicked', 'news')) != len(group):
             print(f"[Warning] period {period_start} - mismatch edges vs group size")
