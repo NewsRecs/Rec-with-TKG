@@ -34,7 +34,7 @@ class GCN(nn.Module):
             else:
                 updated_feat = g.nodes['user'].data['new_feat']
             
-            return updated_feat    
+        return updated_feat    
     
     def forward(self, g: dgl.DGLHeteroGraph):
         """
