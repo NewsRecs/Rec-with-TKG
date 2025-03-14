@@ -1,5 +1,3 @@
-# model_name.py
-
 import torch
 import pickle  
 import os
@@ -7,31 +5,48 @@ from tqdm import tqdm
 import pandas as pd
 import numpy as np
 import time
-from GCRNN import GCRNN
+# import matplotlib.pyplot as plt
+from make_train_datas import make_train_datas
+from make_test_datas import make_test_datas
+from time_split_batch import split_train_graph
+from psj.GCRNN import GCRNN
+from ns_indexing import ns_indexing
+from psj.EarlyStopping import EarlyStopping
+from evaluate import ndcg_score, mrr_score
+from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score
+from psj.config import Config
+import dgl
+
 
 def main():
-    # 0) device 정의
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # 0) device 및 batch_size 설정
+    torch.cuda.set_device(0)
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    batch_size = 500
+    # device = torch.device("cpu")
+
+
+    print ('Available devices ', torch.cuda.device_count())
+    print ('Current cuda device ', torch.cuda.current_device())
+    print(torch.cuda.get_device_name(device))
+    print(dgl.__version__)
     
-    # 1) 저장된 snapshots, wor2int, 사전 학습된 단어 embeddings, negative samples 및 df 불러오기
-    # snapshots_embeddings.pkl 로드
-    snapshots_path = "./Adressa_4w/history/snapshots.pkl"
-    with open(snapshots_path, 'rb') as f:
-        snapshots = pickle.load(f)
     
-    print(f"Loaded snapshots' embeddings from {snapshots_path}. #={len(snapshots)}")
+    
+    g, splitted_g = split_train_graph(5)
+    # with open('./psj/Adressa_4w/train/train_datas.pkl', 'rb') as f:
+    #     datas = pickle.load(f)
+    datas = make_train_datas()
+    train_news, train_category, train_time = zip(*datas)
+    all_users = [i for i in range(84989)]
+
 
     # 사전 학습된 단어 로드
-    word2int = pd.read_csv(os.path.join('./Adressa_4w/history/', 'word2int.tsv'), sep='\t')
-
+    word2int = pd.read_csv(os.path.join('./psj/Adressa_4w/history/', 'word2int.tsv'), sep='\t')
     word_to_idx = word2int.set_index('word')['int'].to_dict()
-    embedding_file_path = os.path.join('./Adressa_4w/history/', 'pretrained_word_embedding.npy')
+    embedding_file_path = os.path.join('./psj/Adressa_4w/history/', 'pretrained_word_embedding.npy')
     embeddings = np.load(embedding_file_path)
     pretrained_word_embedding = torch.tensor(embeddings, dtype=torch.float, device=device)   # (330900, 100)
-    
-    # negative samples 로드 - 추후 수정 필요
-    ns_tsv = pd.read_csv(os.path.join('./Adressa_4w/history/', 'behaviors_parsed_ns4_lt36.tsv'), sep='\t')
-    ns_datas = ns_tsv[['candidate_news_pop', 'candidate_news_sqrt_pop', 'candidate_news_rev_log_pop']]
     
     # df 로드
     def tokenize_title(title: str) -> list:
@@ -40,203 +55,263 @@ def main():
         """
         return title.split()
     
-    file_path = './Adressa_4w/history/history_tkg_behaviors.tsv'
+    # train, test의 news 데이터 로드
+    train_news_file_path = './psj/Adressa_5w/train/news.tsv'
+    train_news_df = pd.read_csv(train_news_file_path, sep='\t', header=None)
+    train_news_df.columns = ['clicked_news', 'category', 'subcategory', 'title', 'body', 'identifier', 'publish_time', 'click_time']
+    sub_train_news_df = train_news_df[['clicked_news', 'category', 'subcategory', 'title']]
+    
+    test_news_file_path = './psj/Adressa_5w/test/news.tsv'
+    test_news_df = pd.read_csv(test_news_file_path, sep='\t', header=None)
+    test_news_df.columns = ['clicked_news', 'category', 'subcategory', 'title', 'body', 'identifier', 'publish_time', 'click_time']
+    sub_test_news_df = test_news_df[['clicked_news', 'category', 'subcategory', 'title']]
+    
+    file_path = './psj/Adressa_4w/history/history_tkg_behaviors.tsv'
     df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
+    df['category'] = df['category'].fillna('No category|No subcategory')
+    df[['category', 'subcategory']] = df['category'].str.split('|', n=1, expand=True)
+    sub_history_news_df = df[['clicked_news', 'category', 'subcategory', 'title']]
+
+    # 3개의 df를 합치기 (ignore_index=True로 인덱스 재설정) - 모든 뉴스 고려
+    combined_news_df = pd.concat([sub_history_news_df, sub_train_news_df, sub_test_news_df], ignore_index=True)
+    
     user_num = len(df['history_user'].unique())
     # 뉴스별 제목 집계
-    news_info = df.groupby('clicked_news', as_index=False).agg({'title': 'first'})
+    news_info = combined_news_df.groupby('clicked_news', as_index=False).agg({
+        'title': 'first',
+        'category': 'first',
+        'subcategory': 'first'
+    })
 
     # title -> token -> index
     news_info['title_words'] = news_info['title'].apply(tokenize_title)
     news_info['title_idx'] = news_info['title_words'].apply(
-        lambda words: [word_to_idx[w] if w in word_to_idx else 0 for w in words]
+        lambda words: [word_to_idx[w.lower()] if w.lower() in word_to_idx else 0 for w in words]
     )
-
+    
+    # category, subcategory -> index
+    category2int = pd.read_csv('./psj/Adressa_4w/history/category2int_pio.tsv', sep='\t')    
+    cat_num = Config.num_categories
+    news_info['category_idx'] = news_info['category'].map(category2int.to_dict())
+    news_info['subcategory_idx'] = news_info['subcategory'].map(category2int.to_dict())
+    
+    
     # news_info에서 필요한 컬럼만 선택하여 news_info_df 생성
-    news_info_df = news_info[['clicked_news', 'title_idx']].rename(
+    news_info_df = news_info[['clicked_news', 'title_idx', 'category_idx', 'subcategory_idx']].rename(
         columns={'clicked_news': 'news_id'}   # clicked_news를 news_id로 열 이름 변경
     )
 
     # news_id_to_info
     news_id_to_info = news_info_df.set_index('news_id')\
-        [['title_idx']].to_dict(orient='index')
+        [['title_idx', 'category_idx', 'subcategory_idx']].to_dict(orient='index')
         # orient='index': index를 key로, 그 행의 데이터를 dict형태의 value로 저장
     
-    news2int_df = pd.read_csv('./Adressa_4w/history/news2int.tsv', sep='\t')
-    df2 = pd.merge(df, news2int_df, left_on='clicked_news', right_on='news_id', how='left')
-    df2 = df2.sort_values('news_int')
+    news2int_df = pd.read_csv('./psj/Adressa_4w/history/news2int.tsv', sep='\t')
     all_news_ids = news2int_df['news_id'].unique()
+    news_num = len(all_news_ids)
 
-    # news2int = {nid[1:]: i for i, nid in enumerate(all_news_ids)}
-    category2int = pd.read_csv('./Adressa_4w/history/category2int.tsv', sep='\t')
-    cat_num = len(category2int['category']) + 1
-    
-    ### Loading idx_infos
-    train_ns_idx_batch = torch.load('./Adressa_4w/train/train_ns_idx_batch5.pt')
-    train_user_idx_batch = torch.load('./Adressa_4w/train/train_user_idx_batch5.pt')
-    
-    ### Loading train graph
-    g_path = "./Adressa_4w/history/g.pkl"
-    with open(g_path, 'rb') as f:
-        g = pickle.load(f)
-        g.to(device)
-    
-    with open("./Adressa_4w/history/splitted_subgraphs.pkl", 'rb') as f:
-        splitted_subgraphs = pickle.load(f)
-        
-    
-    with open("./Adressa_4w/history/seed_list.pkl", 'rb') as f:
-        seed_lists = pickle.load(f)
-        
-        
-    # a) train dataset(0205 08:00:02 ~ 0212 08:00:01)인 valid_tkg_behaviors.tsv 로드
-    train_file_path = './Adressa_4w/train/valid_tkg_behaviors.tsv'
-    train_df = pd.read_csv(train_file_path, sep='\t', encoding='utf-8')
-    # 'clicked_news' 열에서 '-1' 제거
-    train_df['clicked_newsId'] = train_df['clicked_news'].str.replace(r'-\d+$', '', regex=True)
+    ### Loading idx_infos for calculating NLL loss
+    train_ns_idx_batch = ns_indexing('./psj/Adressa_4w/train/train_ns.tsv', batch_size)
+    # train_user_idx_batch = torch.load('./psj/Adressa_4w/train/train_user_idx_batch.pt')   # 사실 얘는 필요 없음...
 
-    # train_df에서 nan이 존재하는 행 제거
-    train_df = train_df.dropna(subset=['clicked_news'])
-
-    news_num = len(train_df['clicked_news'].unique())
+    
+    # test data 로드 시작 ---------------------------------
+    val_datas, test_datas = make_test_datas()
+    validation_news, validation_time, validation_empty_check = zip(*val_datas)
+    validation_ns_idx_batch = ns_indexing('./psj/Adressa_4w/test/validation_ns.tsv', batch_size)
+    
+    test_news, test_time, test_empty_check = zip(*test_datas)
+    test_ns_idx_batch = ns_indexing('./psj/Adressa_4w/test/test_ns.tsv', batch_size)
     
     
-    
-    # ### Loading test batch infos
-    # test_b_start = time.time()
-    # test_batch_path = './Adressa_4w/test/test_batch5.pkl'
-    # print("Loading batch file..")
-    # with open(test_batch_path, 'rb') as f:
-    #     test_batch = pickle.load(f)
-    
-    # test_users = []
-    # test_news = []
-    # test_snapshots = []
-    # # e_ids = []
-    # test_seed_list = []
-    # for batch_idx, each_batch in tqdm(enumerate(test_batch), desc='Processing test batches'):   # 170개
-    #     test_users.append([])
-    #     test_news.append([])
-    #     test_snapshots.append([])
-    #     # e_ids.append([])
-    #     test_seed_list.append([])
-    #     for idx, snapshot_dict in enumerate(each_batch):   # 1680개
-    #         batch_snapshot = snapshot_dict['subgraph']
-    #         test_snapshots[batch_idx].append(batch_snapshot)
-    #         # batch_eIds = snapshot_dict['edge_ids']
-    #         # e_ids[batch_idx].append(batch_eIds)
-    #         batch_seed_list = snapshot_dict['seed_list']
-    #         test_seed_list[batch_idx].append(batch_seed_list)
-    #         batch_clicked_pairs = snapshot_dict['clicked_pairs']
-    #         for batch_user, batch_news in batch_clicked_pairs:
-    #             test_users[batch_idx].append(batch_user)
-    #             test_news[batch_idx].append(batch_news)
-    # print("Batch loading finished")
-    # print(f"Batch processing time: {int((time.time() - test_b_start)/60)}m")
-    
-    # ### Loading idx_infos
-    # test_ns_idx_batch = torch.load('./Adressa_4w/test/test_ns_idx_batch.pt')
-    # test_user_idx_batch = torch.load('./Adressa_4w/test/test_user_idx_batch.pt')        
-        
-    # # a) test dataset(0212 08:00:02 ~ 0219 08:00:01)인 valid_tkg_behaviors.tsv 로드
-    # test_file_path = './Adressa_4w/test/valid_tkg_behaviors.tsv'
-    # test_df = pd.read_csv(test_file_path, sep='\t', encoding='utf-8')
-    # # 'clicked_news' 열에서 '-1' 제거
-    # test_df['clicked_newsId'] = test_df['clicked_news'].str.replace(r'-\d+$', '', regex=True)
-    # # 불필요한 컬럼 제거
-    # # print(train_df.head())
-    # # print(train_df.columns)
-    # # print(train_df.isna().sum())
-    # # print(train_df[train_df.isna()]) # 하나가 데이터 오류
-    # # print(len(train_df))
-    # # exit()
-
-    # # train_df에서 nan이 존재하는 행 제거
-    # test_df = test_df.dropna(subset=['clicked_news'])
-
-    # test_news_num = len(test_df['clicked_news'].unique())
-    
-        
+    print("data loading finished!")
     # 필요한 정보 로드 끝 -------------------------------------------------------------------------------------------------
     
     # 2) 모델에 필요한 정보 추가 준비
-    learning_rate = 0.01
-    num_epochs = 100
+    learning_rate = 0.0001
+    num_epochs = 5
     batch_size = 500
     batch_num = user_num // batch_size if user_num % batch_size == 0 else user_num // batch_size + 1
-    emb_dim = 128
+    emb_dim = Config.num_filters*3   # 300
     history_length = 100
     
+    es = EarlyStopping(
+        emb_dim=emb_dim,
+        patience=3,
+        min_delta=1e-4,
+        ckpt_dir=f"./Adressa_7w/train/ckpt/val3.5_seed_1024_hl_{history_length}_ndcg",  # 체크포인트 저장 디렉토리
+        verbose=True,
+        save_all=True  # 모든 epoch마다 저장
+    )
+    all_losses = []
+    
     # 3) GCRNN 모델 초기화
-    model = GCRNN(pretrained_word_embedding, all_news_ids, news_id_to_info, user_num, news_num, cat_num, emb_dim=emb_dim, batch_size=500)  
-    optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate)
+    model = GCRNN(all_news_ids, news_id_to_info, user_num, cat_num, news_num, pretrained_word_embedding=pretrained_word_embedding, emb_dim=emb_dim, batch_size=500)  
+    optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate, weight_decay=0.01)   
+    
+    best_loss = float('inf')   # 7.337717744170642
+    check = 0
+    validation_losses = []   # 7.337717744170642, 7.415253834646256
     
     # 4) Batch 학습을 통해 train 수행
     print("Train start !")
-    print(f"# of batch: {batch_num}, # of user: {user_num}, batch size: {batch_size}, embedding dim: {emb_dim}\n")
-    for epoch in tqdm(range(num_epochs), desc='... training epochs'):
+    print(f"# of batch: {batch_num}, # of user: {user_num}, batch size: {batch_size}, lr: {learning_rate}, embedding dim: {emb_dim}, history_length: {history_length} \n")
+    for epoch in range(1, num_epochs+1):
         model.train()
-        for b in range(batch_num):
-            # train_users[b], train_news[b], 업애버림
-            loss = model(seed_lists[b], g, splitted_subgraphs[b], train_user_idx_batch[b], train_ns_idx_batch[b], history_length)
+        epoch_loss_sum = 0.0
+        epoch_samples = 0
+        prev_batch_cnt = 0
+        batch_cnt = 0
+        batch_size = 500
+        for b in tqdm(range(batch_num), desc=f'training {epoch} epoch batches'):
+            prev_batch_cnt = batch_cnt
+            batch_cnt += batch_size
+            # prev_batch = b * batch_size
+            if batch_cnt > len(train_news):
+                batch_cnt = len(train_news)
+            batch_size = batch_cnt - prev_batch_cnt
+
+            loss = model(all_users[prev_batch_cnt:batch_cnt], train_news[prev_batch_cnt:batch_cnt], train_category[prev_batch_cnt:batch_cnt], train_time[prev_batch_cnt:batch_cnt], g, splitted_g, train_ns_idx_batch[b], history_length)
             loss.backward()   # calculate gradient
+            
             optimizer.step()   # update parameter via calculated gradient
             optimizer.zero_grad()   # initialize gradient
+            
+            all_losses.append(loss.item())
+            epoch_loss_sum += loss.item()
+            epoch_samples += 1
+            
+        # epoch이 끝난 시점에서 epoch_loss 계산
+        epoch_loss = epoch_loss_sum / (epoch_samples if epoch_samples else 1)
+        print(f"[Epoch {epoch}] avg train_loss={epoch_loss:.6f}")
+    
+        # 5) validation 수행
+        print("Validation start!")
+        
+        model.eval()
+        with torch.no_grad():
+            list_ndcg5_val = []
+            epoch_losses = []
+            # validation start
+            prev_validation_batch_cnt = 0
+            validation_batch_cnt = 0
+            n_empty = 0
+            batch_size = 500
+            validation_batch_num = user_num // batch_size if user_num % batch_size == 0 else user_num // batch_size + 1
+            for validation_b in tqdm(range(validation_batch_num)):   # 170개
+                prev_validation_batch_cnt = validation_batch_cnt
+                validation_batch_cnt += batch_size
+                if validation_batch_cnt > len(validation_news):
+                    validation_batch_cnt = len(validation_news)
+                batch_size = validation_batch_cnt - prev_validation_batch_cnt
+                # 해당 batch user의 클릭 기록이 하나도 없는 경우 loss 계산 pass
+                if not any(validation_empty_check[prev_validation_batch_cnt:validation_batch_cnt]):
+                    n_empty += 1
+                    continue
+                candidate_score, validation_loss = model.inference(all_users[prev_validation_batch_cnt:validation_batch_cnt], validation_news[prev_validation_batch_cnt:validation_batch_cnt], validation_time[prev_validation_batch_cnt:validation_batch_cnt], g, splitted_g, validation_ns_idx_batch[validation_b], history_length)
+                epoch_losses.append(validation_loss.item())
+                
+                
+                candidate_score = candidate_score.cpu().numpy()
+                real_batch_size = candidate_score.shape[0]
+                num_candidates  = candidate_score.shape[1]
+                for i in range(real_batch_size):
+                    # y_score: i-th 유저에 대한 각 candidate 스코어
+                    y_score = candidate_score[i]
 
-    # 5) test 수행
-    print("Test start!")
-    model.eval()
-    test_batch_size = 500
-    test_batch_num = user_num // test_batch_size if user_num % test_batch_size == 0 else user_num // test_batch_size + 1
+                    # y_true: [1, 0, 0, ...] 꼴로 가정 (정답이 첫 열인 경우)
+                    y_true = np.zeros(num_candidates, dtype=int)
+                    y_true[0] = 1
 
+                    # B. row-wise MRR, nDCG
+                    list_ndcg5_val.append(ndcg_score(y_true, y_score, k=5))
+            
+            val_ndcg5   = np.mean(list_ndcg5)
+                
+            print("# of validation empty batch:", n_empty)
+        mean_epoch_loss = np.mean(np.array(epoch_losses))
+        
+
+        validation_losses.append(mean_epoch_loss)
+        print(f"Validation_losses: {validation_losses}")
+        # EarlyStopping 체크 (train_loss를 임시로 val_loss처럼 사용)
+        es(val_ndcg5, model, epoch, learning_rate)
+        if es.early_stop:
+            print("[EarlyStopping] Training is stopped early.")
+            print(f"Validation_losses: {validation_losses}")
+            print(f"Validation_nDCG@5: {val_ndcg5}")
+            break
+
+    print("\n=== Training finished. Loading best checkpoint for Test ===")
+    best_ckpt = es.best_ckpt_path  # early stopping에서 저장한 best model 경로
+    print(f"Best checkpoint path: {best_ckpt}")
+        
     with torch.no_grad():
-        # for m in range(1,6):
+        # 베스트 모델 로드
+        if best_ckpt is not None and os.path.exists(best_ckpt):
+            model.load_state_dict(torch.load(best_ckpt))
+            model.eval()
+        else:
+            print("[Warning] best checkpoint not found. Evaluate current model instead.")
+            
+        batch_size = 500
+        test_batch_num = user_num // batch_size if user_num % batch_size == 0 else user_num // batch_size + 1
         for m in range(1,2):
-            news_ranks = []
-            job_ranks = []
             prev_test_batch_cnt = 0
             test_batch_cnt = 0
-            predicted_edges_u = []
-            predicted_edges_v = []
-            rel_idx = []
+            all_scores = []   # 모든 batch scores
+            all_labels = []   # 모든 batch의 실제 labels (row별로 [1, 0, 0, ...])
+            list_mrr   = []
+            list_ndcg5 = []
+            list_ndcg10 = []
+            n_empty = 0
             for test_b in tqdm(range(test_batch_num)):
-                test_batch_cnt+=test_batch_size
-                All_UC_score, All_UJ_score = model.inference(test_users[b], test_news[b], test_seed_list[b], g, test_snapshots[b], test_user_idx_batch[b], test_ns_idx_batch[b], history_length)
-                for user_id, UC_score, UJ_score in zip(test_user_entid2[prev_test_batch_cnt:test_batch_cnt], All_UC_score, All_UJ_score):
-                    if len(label_comps_index[user_id][train_until + m]):
-                        user_future_companies_index = label_comps_index[user_id][train_until + m]
-                        Company_label_scores = UC_score[user_future_companies_index] # 정답 회사들의 점수들을 뽑는 과정이다.
-                        for cls_ in Company_label_scores:
-                            gap = UC_score - cls_
-                            past_gap = gap[past_companies[user_id]]
-                            news_ranks.append(len(gap[gap>0]) - len(past_gap[past_gap>0]) + 1)
-                        Job_label_scores = UJ_score[label_jobs_index[user_id][train_until + m]]
-                        for jls_ in Job_label_scores:
-                            gap = UJ_score - jls_
-                            job_ranks.append(len(gap[gap>0]) + 1)
-                        comp_top_k1 = np.argsort(UC_score.to(torch.device("cpu")))[-k1:] + user_id_max
-                        job_top_k2 = np.argsort(UJ_score.to(torch.device("cpu")))[-k2:]
-                        for c in comp_top_k1:
-                            predicted_edges_u.append(user_id)
-                            predicted_edges_v.append(c)
-                            predicted_edges_u.append(c)
-                            predicted_edges_v.append(user_id)
-                            rel_idx.append(job_top_k2[0])
-                            rel_idx.append(job_top_k2[0])
                 prev_test_batch_cnt = test_batch_cnt
-            #print("m = ", m)
-            mrr, h1, h3, h5, h10 = print_metrics(company_ranks, job_ranks)
-            #=============================
-            #train_until+=1
-            remove_list.append([])
-            predicted_graph = dgl.DGLGraph()
-            predicted_graph.add_nodes(Train_Graph.number_of_nodes())
-            predicted_graph.add_edges(predicted_edges_u, predicted_edges_v)
-            predicted_graph.edata['relation_idx'] = torch.tensor(rel_idx)
-            splitted_Train_Graph.append(predicted_graph)
-    
+                test_batch_cnt += batch_size
+                if test_batch_cnt > len(test_news):
+                    test_batch_cnt = len(test_news)
+                batch_size = test_batch_cnt - prev_test_batch_cnt
+                # 해당 batch user의 클릭 기록이 하나도 없는 경우를 방지
+                if not any(test_empty_check[prev_test_batch_cnt:test_batch_cnt]):
+                    n_empty += 1
+                    continue
+                candidate_score, test_loss = model.inference(all_users[prev_test_batch_cnt:test_batch_cnt], test_news[prev_test_batch_cnt:test_batch_cnt], 
+                                                             test_time[prev_test_batch_cnt:test_batch_cnt], g, splitted_g, test_ns_idx_batch[test_b], history_length)
+                candidate_score = candidate_score.cpu().numpy()
+                real_batch_size = candidate_score.shape[0]
+                num_candidates  = candidate_score.shape[1]
 
-    print("\nAll train finished.")
+                for i in range(real_batch_size):
+                    # y_score: i-th 유저에 대한 각 candidate 스코어
+                    y_score = candidate_score[i]
+
+                    # y_true: [1, 0, 0, ...] 꼴로 가정 (정답이 첫 열인 경우)
+                    y_true = np.zeros(num_candidates, dtype=int)
+                    y_true[0] = 1
+
+                    # A. AUC 계산 위해서는 전체 스코어를 flatten 해서 쌓아두는 게 일반적
+                    #   (row-wise로 AUC 계산하고 평균내도 되긴 합니다만, 보통 전체를 한 번에 보기도 함)
+                    all_scores.extend(y_score)
+                    all_labels.extend(y_true)
+
+                    # B. row-wise MRR, nDCG
+                    list_mrr.append(mrr_score(y_true, y_score))
+                    list_ndcg5.append(ndcg_score(y_true, y_score, k=5))
+                    list_ndcg10.append(ndcg_score(y_true, y_score, k=10))
+            print("# of empty batch:", n_empty)
+                
+            final_auc     = roc_auc_score(all_labels, all_scores)
+            final_mrr     = np.mean(list_mrr)
+            final_ndcg5   = np.mean(list_ndcg5)
+            final_ndcg10  = np.mean(list_ndcg10)
+
+            print(f"Final Test Loss: {test_loss.item()}")
+            print("[Final Test Metrics]")
+            print(f"AUC        : {final_auc:.4f}")
+            print(f"MRR        : {final_mrr:.4f}")
+            print(f"nDCG@5     : {final_ndcg5:.4f}")
+            print(f"nDCG@10    : {final_ndcg10:.4f}")
+
 
 if __name__ == "__main__":
     main()
