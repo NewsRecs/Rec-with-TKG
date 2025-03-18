@@ -10,7 +10,6 @@ def ns_indexing(ns_file_path, batch_size=500, user_num=84989):
 
     all_user_ids = [i for i in range(user_num)]
 
-    batch_size = 500
     # batch_user_emb = []
 
     # *** train_batch_embs의 shape: batch 수

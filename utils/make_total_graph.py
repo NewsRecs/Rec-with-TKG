@@ -50,6 +50,12 @@ history_data_path = './psj/Adressa_4w/history/history_tkg_behaviors.tsv'
 df = pd.read_csv(history_data_path, sep='\t', encoding='utf-8')
 df = df.dropna(subset=['clicked_news'])
 
+train_data_path = './psj/Adressa_4w/train/valid_tkg_behaviors.tsv'
+train_df = pd.read_csv(train_data_path, sep='\t', encoding='utf-8')
+train_df = train_df.dropna(subset=['clicked_news'])
+
+df = pd.concat([df, train_df])
+
 # click_time이 string일 경우 datetime으로 변환
 df['click_time'] = pd.to_datetime(df['click_time'])
 
