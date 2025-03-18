@@ -2,6 +2,7 @@ import pickle
 import pandas as pd
 import torch
 from tqdm import tqdm
+import datetime
 
 """
 full_news_encoder.py를 사용하기 위해 category2int_pio.tsv로 변경
@@ -107,11 +108,12 @@ def make_train_datas():
 
         return base_start + datetime.timedelta(minutes=interval_minutes * periods)
 
+    train_df['click_time'] = pd.to_datetime(train_df['click_time'])
     train_df['Period_Start'] = train_df['click_time'].apply(lambda x: get_period_start(x, interval_minutes=30))
         
     unique_period_starts = train_df['Period_Start'].unique()
     time_dict = {ps: i+1680 for i, ps in enumerate(sorted(unique_period_starts))}
-    train_df['time_idx'] = df['Period_Start'].map(time_dict)
+    train_df['time_idx'] = train_df['Period_Start'].map(time_dict)
 
     """
     train_news: 각 요소(리스트)는 train data에서 각 유저가 클릭한 news_ids
@@ -135,7 +137,7 @@ def make_train_datas():
 
     train_time = []
     for u_id in tqdm(range(len(all_user_ids))):
-        u_time = torch.tensor(train_df[train_df['user_int'] == u_id]['time_idx'], dtype=torch.long)
+        u_time = torch.tensor(train_df[train_df['user_int'] == u_id]['time_idx'].values, dtype=torch.long)
         train_time.append(u_time)
         
     # print(train_time[0])

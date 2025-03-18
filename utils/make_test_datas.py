@@ -52,12 +52,12 @@ def make_test_datas():
     validation_df = test_df[test_df['click_time'] <= criteria_time]
     test_5d_df = test_df[test_df['click_time'] > criteria_time]
 
-    print(len(test_5d_df['history_user'].unique()))
-    print(len(test_5d_df['user_int'].unique()))
-    print(len(test_5d_df))
-    print(len(validation_df['history_user'].unique()))
-    print(len(validation_df['user_int'].unique()))
-    print(len(validation_df))
+    # print(len(test_5d_df['history_user'].unique()))
+    # print(len(test_5d_df['user_int'].unique()))
+    # print(len(test_5d_df))
+    # print(len(validation_df['history_user'].unique()))
+    # print(len(validation_df['user_int'].unique()))
+    # print(len(validation_df))
     # exit()
 
 
@@ -77,7 +77,7 @@ def make_test_datas():
     test_empty_check = []
     for u_id in tqdm(range(len(all_user_ids))):
         u_len = len(test_5d_df[test_5d_df['user_int'] == u_id])
-        u_time = torch.tensor([1679 for _ in range(u_len)], dtype=torch.long)
+        u_time = torch.tensor([2015 for _ in range(u_len)], dtype=torch.long)   # train까지 포함한 snapshot 수는 2016개
         test_time.append(u_time)
         if u_len == 0:
             test_empty_check.append(False)
@@ -96,7 +96,7 @@ def make_test_datas():
     validation_empty_check = []
     for u_id in tqdm(range(len(all_user_ids))):
         u_len = len(validation_df[validation_df['user_int'] == u_id])
-        u_time = torch.tensor([1679 for _ in range(u_len)], dtype=torch.long)
+        u_time = torch.tensor([2015 for _ in range(u_len)], dtype=torch.long)   # train까지 포함한 snapshot 수는 2016개
         validation_time.append(u_time)
         if u_len == 0:
             validation_empty_check.append(False)

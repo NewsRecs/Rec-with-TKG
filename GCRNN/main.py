@@ -13,6 +13,11 @@ check, batch size 로직 두 개랑 print들만 바꿈
 3-2) ns_idx.py를 함수화해서 main에서 import하여 사용할 수 있도록 하기 (input: batch_size) - 완
 
 """
+
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import torch
 import pickle  
 import os
@@ -38,6 +43,7 @@ def main():
     torch.cuda.set_device(0)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     batch_size = 50
+    snapshot_weeks = 6   ### history + train
     # device = torch.device("cpu")
 
 
@@ -48,11 +54,11 @@ def main():
     
     
     ### history + train snapshots
-    g, splitted_g = split_train_graph(6)   
+    g, splitted_g = split_train_graph(snapshot_weeks)   
     # with open('./psj/Adressa_4w/train/train_datas.pkl', 'rb') as f:
     #     datas = pickle.load(f)
-    datas = make_train_datas()
-    train_news, train_category, train_time = zip(*datas)
+    # datas = make_train_datas()
+    # train_news, train_category, train_time = zip(*datas)
     all_users = [i for i in range(84989)]
 
 
@@ -70,25 +76,30 @@ def main():
         """
         return title.split()
     
-    # train, test의 news 데이터 로드
-    train_news_file_path = './psj/Adressa_5w/train/news.tsv'
-    train_news_df = pd.read_csv(train_news_file_path, sep='\t', header=None)
-    train_news_df.columns = ['clicked_news', 'category', 'subcategory', 'title', 'body', 'identifier', 'publish_time', 'click_time']
-    sub_train_news_df = train_news_df[['clicked_news', 'category', 'subcategory', 'title']]
+"""    # history, train, test의 "news" 데이터 로드
+    file_path = './psj/Adressa_4w/train/valid_tkg_behaviors.tsv'
+    train_df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
+    train_df['category'] = train_df['category'].fillna('No category|No subcategory')
+    train_df[['category', 'subcategory']] = train_df['category'].str.split('|', n=1, expand=True)
+    sub_train_news_df = train_df[['clicked_news', 'category', 'subcategory', 'title']]
     
-    test_news_file_path = './psj/Adressa_5w/test/news.tsv'
-    test_news_df = pd.read_csv(test_news_file_path, sep='\t', header=None)
-    test_news_df.columns = ['clicked_news', 'category', 'subcategory', 'title', 'body', 'identifier', 'publish_time', 'click_time']
-    sub_test_news_df = test_news_df[['clicked_news', 'category', 'subcategory', 'title']]
+    file_path = './psj/Adressa_4w/test/valid_tkg_behaviors.tsv'
+    test_df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
+    test_df['category'] = test_df['category'].fillna('No category|No subcategory')
+    test_df[['category', 'subcategory']] = test_df['category'].str.split('|', n=1, expand=True)
+    sub_test_news_df = test_df[['clicked_news', 'category', 'subcategory', 'title']]
     
     file_path = './psj/Adressa_4w/history/history_tkg_behaviors.tsv'
     df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
     df['category'] = df['category'].fillna('No category|No subcategory')
     df[['category', 'subcategory']] = df['category'].str.split('|', n=1, expand=True)
-    sub_history_news_df = df[['clicked_news', 'category', 'subcategory', 'title']]
+    sub_history_news_df = df[['clicked_news', 'category', 'subcategory', 'title']]"""
 
     # 3개의 df를 합치기 (ignore_index=True로 인덱스 재설정) - 모든 뉴스 고려
     combined_news_df = pd.concat([sub_history_news_df, sub_train_news_df, sub_test_news_df], ignore_index=True)
+    all_news_ids = combined_news_df['clicked_news'].unique()
+    news_num = len(all_news_ids)
+    print("news_num:", news_num)
     
     user_num = len(df['history_user'].unique())
     # 뉴스별 제목 집계
@@ -121,11 +132,9 @@ def main():
         [['title_idx', 'category_idx', 'subcategory_idx']].to_dict(orient='index')
         # orient='index': index를 key로, 그 행의 데이터를 dict형태의 value로 저장
     
-    news2int_df = pd.read_csv('./psj/Adressa_4w/history/news2int.tsv', sep='\t')
+    # news2int_df = pd.read_csv('./psj/Adressa_4w/history/news2int.tsv', sep='\t')
     # df2 = pd.merge(df, news2int_df, left_on='clicked_news', right_on='news_id', how='left')
     # df2 = df2.sort_values('news_int')
-    all_news_ids = news2int_df['news_id'].unique()
-    news_num = len(all_news_ids)
 
     # news2int = {nid[1:]: i for i, nid in enumerate(all_news_ids)}
 
@@ -158,6 +167,7 @@ def main():
     batch_num = user_num // batch_size if user_num % batch_size == 0 else user_num // batch_size + 1
     emb_dim = Config.num_filters*3   # 300
     history_length = 100
+    snapshots_num = snapshot_weeks * 7 * 24 * 2   # 2016
     
     es = EarlyStopping(
         emb_dim=emb_dim,
@@ -170,7 +180,7 @@ def main():
     all_losses = []
     
     # 3) GCRNN 모델 초기화
-    model = GCRNN(all_news_ids, news_id_to_info, user_num, cat_num, news_num, pretrained_word_embedding=pretrained_word_embedding, emb_dim=emb_dim, batch_size=500)  
+    model = GCRNN(all_news_ids, news_id_to_info, user_num, cat_num, news_num, pretrained_word_embedding=pretrained_word_embedding, emb_dim=emb_dim, batch_size=batch_size, snapshots_num=snapshots_num)  
     optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate, weight_decay=0.01)   
     # epoch이 중간에 꺼졌을 때 바뀌는 부분 (1 epoch부터 돌릴 때는 원상 복구 필요!11)
     # checkpoint_path = './Adressa_7w/train/ckpt/lr_0.01/epoch_2_lr_0.01_embdim_128loss_0.1670.pth'

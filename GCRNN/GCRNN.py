@@ -269,15 +269,10 @@ class GCRNN(nn.Module):
         seed_list = []
         seed_entid = []
         train_t = []
-        for time_list in time_batch:
-            for time in time_list:
-                train_t.append(time)
-        
-        seed_entid = []
-        train_t = []
-        latest_train_time = 1679
+        latest_train_time = self.snapshots_num - 1
         for i in range(latest_train_time+1):
             seed_list.append(set())
+            
         for time_list, user in zip(time_batch, user_batch):
             for time in time_list:
                 seed_list[time].add(user)  
@@ -373,7 +368,7 @@ class GCRNN(nn.Module):
             for time in time_list:
                 test_t.append(time)
         
-        latest_train_time = 1679
+        latest_train_time = 2015   # train까지 포함한 snapshot 수는 2016개
         seed_entid = []
         test_t = []
         for i in range(latest_train_time+1):
