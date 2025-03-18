@@ -32,7 +32,7 @@ class GCN(nn.Module):
             if etype == 'clicked':
                 updated_feat = g.nodes['news'].data['new_feat']
             else:
-                updated_feat = g.nodes['user'].data['new_feat']
+                updated_feat = g.nodes['user'].data['new_feat'] 
             
             return updated_feat    
     
