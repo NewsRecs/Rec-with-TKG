@@ -6,15 +6,9 @@ from tqdm import tqdm
 import numpy as np
 import gc
 import random
-from psj.nce_loss import NCELoss
-"""
-해야 할 일들:
-1. GCN 업데이트 처리 (완)
-2. GRNN 유저 id로 각 g에 존재하는 유저들 embedding만 호출 (완)
-3. 뉴스 인코더 추가 (완)
-"""
-from psj.full_news_encoder import NewsEncoder
-from psj.config import Config
+from utils.nce_loss import NCELoss
+from utils.full_news_encoder import NewsEncoder
+from config import Config
 
 torch.cuda.set_device(0)
 random_seed = 1024

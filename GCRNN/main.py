@@ -21,15 +21,15 @@ import pandas as pd
 import numpy as np
 import time
 # import matplotlib.pyplot as plt
-from make_train_datas import make_train_datas
-from make_test_datas import make_test_datas
-from time_split_batch import split_train_graph
-from psj.GCRNN import GCRNN
-from ns_indexing import ns_indexing
-from psj.EarlyStopping import EarlyStopping
-from evaluate import ndcg_score, mrr_score
+from utils.make_train_datas import make_train_datas
+from utils.make_test_datas import make_test_datas
+from utils.time_split_batch import split_train_graph
+from GCRNN import GCRNN
+from utils.ns_indexing import ns_indexing
+from utils.EarlyStopping import EarlyStopping
+from utils.evaluate import ndcg_score, mrr_score
 from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score
-from psj.config import Config
+from config import Config
 import dgl
 
 
@@ -163,7 +163,7 @@ def main():
         emb_dim=emb_dim,
         patience=3,
         min_delta=1e-4,
-        ckpt_dir=f"./Adressa_7w/train/ckpt/val3.5_seed_1024_hl_{history_length}_all_metrics",  # 체크포인트 저장 디렉토리
+        ckpt_dir=f"./Adressa_7w/train/ckpt/train_to_snapshots/batch_size_{batch_size}/",  # 체크포인트 저장 디렉토리
         verbose=True,
         save_all=True  # 모든 epoch마다 저장
     )
