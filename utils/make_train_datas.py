@@ -33,7 +33,6 @@ def make_train_datas():
     # a) train dataset(0205 08:00:02 ~ 0212 08:00:01)인 valid_tkg_behaviors.tsv 로드
     train_file_path = './psj/Adressa_4w/history/all_news.tsv'
     train_df = pd.read_csv(train_file_path, sep='\t', encoding='utf-8')
-    train_users = train_df['history_user']
     # 'clicked_news' 열에서 '-1' 제거
     train_df['clicked_news'] = train_df['clicked_news'].str.replace(r'-\d+$', '', regex=True)
     # 'clicked_newsId'를 기준으로 'category' 매칭
