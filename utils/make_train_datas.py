@@ -31,7 +31,7 @@ def make_train_datas():
     # train_ns = pd.read_csv(train_ns_path, sep='\t')
 
     # a) train dataset(0205 08:00:02 ~ 0212 08:00:01)인 valid_tkg_behaviors.tsv 로드
-    train_file_path = './psj/Adressa_4w/history/all_news.tsv'
+    train_file_path = './psj/Adressa_4w/train/valid_tkg_behaviors.tsv'
     train_df = pd.read_csv(train_file_path, sep='\t', encoding='utf-8')
     # 'clicked_news' 열에서 '-1' 제거
     train_df['clicked_news'] = train_df['clicked_news'].str.replace(r'-\d+$', '', regex=True)

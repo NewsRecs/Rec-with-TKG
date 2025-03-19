@@ -85,7 +85,7 @@ def main():
     combined_news_df = pd.read_csv('./psj/Adressa_4w/history/all_news.tsv', sep='\t')
     all_news_ids = combined_news_df['clicked_news'].unique()
     news_num = len(all_news_ids)
-    print("news_num:", news_num)
+    # print("news_num:", news_num)
     
     user_num = len(df['history_user'].unique())
     # 뉴스별 제목 집계
@@ -94,7 +94,7 @@ def main():
         'category': 'first',
         'subcategory': 'first'
     })
-    print(news_info)
+    # print(news_info)
 
     # title -> token -> index
     news_info['title_words'] = news_info['title'].apply(tokenize_title)
