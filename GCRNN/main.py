@@ -55,10 +55,10 @@ def main():
     
     ### history + train snapshots
     g, splitted_g = split_train_graph(snapshot_weeks)   
-    # with open('./psj/Adressa_4w/train/train_datas.pkl', 'rb') as f:
-    #     datas = pickle.load(f)
-    # datas = make_train_datas()
-    # train_news, train_category, train_time = zip(*datas)
+    with open('./psj/Adressa_4w/train/train_datas.pkl', 'rb') as f:
+        datas = pickle.load(f)
+    datas = make_train_datas()
+    train_news, train_category, train_time = zip(*datas)
     all_users = [i for i in range(84989)]
 
 
@@ -75,28 +75,14 @@ def main():
         2.2) 타이틀을 공백 기준으로 단순 토크나이징
         """
         return title.split()
-    
-"""    # history, train, test의 "news" 데이터 로드
-    file_path = './psj/Adressa_4w/train/valid_tkg_behaviors.tsv'
-    train_df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
-    train_df['category'] = train_df['category'].fillna('No category|No subcategory')
-    train_df[['category', 'subcategory']] = train_df['category'].str.split('|', n=1, expand=True)
-    sub_train_news_df = train_df[['clicked_news', 'category', 'subcategory', 'title']]
-    
-    file_path = './psj/Adressa_4w/test/valid_tkg_behaviors.tsv'
-    test_df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
-    test_df['category'] = test_df['category'].fillna('No category|No subcategory')
-    test_df[['category', 'subcategory']] = test_df['category'].str.split('|', n=1, expand=True)
-    sub_test_news_df = test_df[['clicked_news', 'category', 'subcategory', 'title']]
-    
+
     file_path = './psj/Adressa_4w/history/history_tkg_behaviors.tsv'
     df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
     df['category'] = df['category'].fillna('No category|No subcategory')
     df[['category', 'subcategory']] = df['category'].str.split('|', n=1, expand=True)
-    sub_history_news_df = df[['clicked_news', 'category', 'subcategory', 'title']]"""
-
+    
     # 3개의 df를 합치기 (ignore_index=True로 인덱스 재설정) - 모든 뉴스 고려
-    combined_news_df = pd.concat([sub_history_news_df, sub_train_news_df, sub_test_news_df], ignore_index=True)
+    combined_news_df = pd.read_csv('./psj/Adressa_4w/history/all_news.tsv', sep='\t')
     all_news_ids = combined_news_df['clicked_news'].unique()
     news_num = len(all_news_ids)
     print("news_num:", news_num)
@@ -108,6 +94,7 @@ def main():
         'category': 'first',
         'subcategory': 'first'
     })
+    print(news_info)
 
     # title -> token -> index
     news_info['title_words'] = news_info['title'].apply(tokenize_title)

@@ -10,10 +10,8 @@ full_news_encoder.py를 사용하기 위해 category2int_pio.tsv로 변경
 
 def make_train_datas():
     # 각 뉴스의 카테고리만 가져오기
-    train_news_file_path = './psj/Adressa_5w/train/news.tsv'
-    train_news_df = pd.read_csv(train_news_file_path, sep='\t', header=None)
-    train_news_df.columns = ['newsId', 'category', 'subcategory', 'title', 'body', 'identifier', 'publish_time', 'click_time']
-    sub_train_news_df = train_news_df[['newsId', 'category']]
+    all_news_df = pd.read_csv('./psj/Adressa_4w/history/all_news_nyheter_splitted.tsv', sep='\t')
+    sub_all_news_df = all_news_df[['newsId', 'category']]
 
 
 
@@ -33,13 +31,13 @@ def make_train_datas():
     # train_ns = pd.read_csv(train_ns_path, sep='\t')
 
     # a) train dataset(0205 08:00:02 ~ 0212 08:00:01)인 valid_tkg_behaviors.tsv 로드
-    train_file_path = './psj/Adressa_4w/train/valid_tkg_behaviors.tsv'
+    train_file_path = './psj/Adressa_4w/history/all_news.tsv'
     train_df = pd.read_csv(train_file_path, sep='\t', encoding='utf-8')
     train_users = train_df['history_user']
     # 'clicked_news' 열에서 '-1' 제거
     train_df['clicked_news'] = train_df['clicked_news'].str.replace(r'-\d+$', '', regex=True)
     # 'clicked_newsId'를 기준으로 'category' 매칭
-    train_df = train_df.merge(sub_train_news_df, left_on='clicked_news', right_on='newsId', how='left')
+    train_df = train_df.merge(sub_all_news_df, left_on='clicked_news', right_on='newsId', how='left')
 
     # print(train_df.head())
     # print(train_df.columns)

@@ -6,10 +6,8 @@ from tqdm import tqdm
 
 def make_test_datas():
     # 각 뉴스의 카테고리만 가져오기
-    test_news_file_path = './psj/Adressa_5w/test/news.tsv'
-    test_news_df = pd.read_csv(test_news_file_path, sep='\t', header=None)
-    test_news_df.columns = ['newsId', 'category', 'subcategory', 'title', 'body', 'identifier', 'publish_time', 'click_time']
-    sub_test_news_df = test_news_df[['newsId', 'category']]
+    all_news_df = pd.read_csv('./psj/Adressa_4w/history/all_news_nyheter_splitted.tsv', sep='\t')
+    sub_all_news_df = all_news_df[['newsId', 'category']]
 
     # news2int 가져오기
     news2int_file_path = './psj/Adressa_4w/history/news2int.tsv'
@@ -21,7 +19,7 @@ def make_test_datas():
     # 'clicked_news' 열에서 '-1' 제거
     test_df['clicked_news'] = test_df['clicked_news'].str.replace(r'-\d+$', '', regex=True)
     # 'clicked_newsId'를 기준으로 'category' 매칭
-    test_df = test_df.merge(sub_test_news_df, left_on='clicked_news', right_on='newsId', how='left')
+    test_df = test_df.merge(sub_all_news_df, left_on='clicked_news', right_on='newsId', how='left')
     # test_df에서 nan이 존재하는 행 제거
     test_df = test_df.dropna(subset=['clicked_news'])
 

@@ -115,8 +115,16 @@ all_user_ids = sorted([user2int[u] for u in users])
 
 
 # (2-4) category2int 적용
-df['category'] = df['category'].fillna('No category|No subcategory')
-df[['Category', 'Subcategory']] = df['category'].str.split('|', n=1, expand=True)
+# df['category'] = df['category'].fillna('No category|No subcategory')
+# df[['Category', 'Subcategory']] = df['category'].str.split('|', n=1, expand=True)
+
+### df에 알맞은 category 설정 위함
+all_news_df = pd.read_csv('./psj/Adressa_4w/history/all_news_nyheter_splitted.tsv', sep='\t')
+sub_all_news_df = all_news_df[['newsId', 'category']]
+
+df.drop(columns=['category'], inplace=True)
+df = pd.merge(df, sub_all_news_df, left_on='clicked_news', right_on='newsId', how='left')
+df.drop(columns=['newsId'], inplace=True)
 
 category2int = pd.read_csv('./psj/Adressa_4w/history/category2int_pio.tsv', sep='\t')
 # 필요시 category2int에 'No category' 추가
@@ -125,7 +133,7 @@ if 'No category' not in category2int['category'].values:
     category2int = pd.concat([new_row, category2int], ignore_index=True)
 
 cat2int = category2int.set_index('category')['int'].to_dict()
-df['category_int'] = df['Category'].map(cat2int).fillna(0)  # 혹시 매핑 안 되면 0으로 처리
+df['category_int'] = df['category'].map(cat2int).fillna(0)  # 혹시 매핑 안 되면 0으로 처리
 
 
 # group 생성
