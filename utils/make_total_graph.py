@@ -52,7 +52,8 @@ df = df.dropna(subset=['clicked_news'])
 
 train_data_path = './psj/Adressa_4w/train/valid_tkg_behaviors.tsv'
 train_df = pd.read_csv(train_data_path, sep='\t', encoding='utf-8')
-train_df = train_df.dropna(subset=['clicked_news'])
+train_df['clicked_news'] = train_df['clicked_news'].str.replace(r'-\d+$', '', regex=True)
+train_df = train_df[train_df.notna()]
 
 df = pd.concat([df, train_df])
 
@@ -65,47 +66,27 @@ df['Period_Start'] = df['click_time'].apply(lambda x: get_period_start(x, interv
 unique_period_starts = df['Period_Start'].unique()
 time_dict = {ps: i for i, ps in enumerate(sorted(unique_period_starts))}
 df['time_idx'] = df['Period_Start'].map(time_dict)
+# print(df)
+# exit()
 # print(len(df[df['time_idx'] == 28]))
 # exit()
 
 
 # (2-2) news2int 적용
-DIRECTORY = './psj/Adressa_4w'
-i = 1
-data_type = ['train', 'test']
-for dt in data_type:
-    data_folder = os.path.join(DIRECTORY, dt)
-    news_file = os.path.join(data_folder, 'valid_tkg_behaviors.tsv')
-        
-    print(f'{len(os.listdir(data_folder))}     파일:{news_file}',end=' #')
-
-    # TSV 파일 읽기
-    i += 1
-    globals()[f"data{i}"] = pd.read_csv(news_file, sep='\t', header=None)
-    globals()[f"data{i}"].columns = ['click_user', 'click_time', 'history', 'clicked_news']
-    
-history_news = set(df['clicked_news'].unique().tolist())
-data2_news = data2['clicked_news'].dropna().unique().tolist()
-data3_news = data3['clicked_news'].dropna().unique().tolist()
-
-invalid_rows_data2 = data2[
-    ~data2['clicked_news'].astype(str).str.endswith('-1') |
-    data2['clicked_news'].isna()
-]
-invalid_idx = invalid_rows_data2.index.tolist()
-
-data2_news = [n[:-2] for n in data2_news]
-data3_news = [n[:-2] for n in data3_news]
-total_news = set(history_news) | set(data2_news) | set(data3_news)
-total_news = list(total_news)
-news2int = {news_id: idx for idx, news_id in enumerate(total_news)}
-news2int = pd.DataFrame({
-    'news_id': list(news2int.keys()),
-    'news_int': list(news2int.values())
-})
-df = pd.merge(df, news2int[['news_id', 'news_int']], 
-              left_on='clicked_news', right_on='news_id', how='left')
+news2int = pd.read_csv('./psj/Adressa_4w/history/news2int.tsv', sep='\t')
+df['clicked_news'] = df['clicked_news'].astype(str).str.strip()
+news2int['news_id'] = news2int['news_id'].astype(str).str.strip()
+df = pd.merge(df, news2int, left_on='clicked_news', right_on='news_id', how='left')
 df.drop(columns=['news_id'], inplace=True)
+# print(df['clicked_news'].head(10))
+# print(news2int['news_id'].head(10))
+# print(df['clicked_news'].dtype, news2int['news_id'].dtype)
+# print(df['news_int'].describe())
+# print(df[df.isna()])
+print(df[df['news_int'].isna()])  
+print(df[df['clicked_news'].isna()])
+print(df[df['category'].isna()])
+# exit()
 
 # (2-3) user2int 적용
 users = df['history_user'].unique()
@@ -140,7 +121,7 @@ df['category_int'] = df['category'].map(cat2int).fillna(0)  # 혹시 매핑 안 
 # times = df['Period_Start'].unique().tolist()
 # time_dict = {time: i for i, time in enumerate(times)}
 # df['time_idx'] = df['Period_Start'].map(time_dict)
-"""seed_list?"""
+
 grouped = df.groupby('Period_Start')
 group_user_int = []
 for i in range(len(df['time_idx'].unique())):
@@ -193,4 +174,5 @@ g.edata['time_idx'] = torch.tensor(edge_time_idx, dtype=torch.long)
 g_save_path = "./psj/Adressa_4w/history/total_graph_full.bin"
 save_graphs(g_save_path, [g])
 
+print(g.number_of_nodes())
 print("Total graph g saved!")

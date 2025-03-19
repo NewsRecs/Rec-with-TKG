@@ -42,7 +42,7 @@ def main():
     # 0) device 및 batch_size 설정
     torch.cuda.set_device(0)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    batch_size = 50
+    batch_size = 150
     snapshot_weeks = 6   ### history + train
     # device = torch.device("cpu")
 
@@ -55,6 +55,8 @@ def main():
     
     ### history + train snapshots
     g, splitted_g = split_train_graph(snapshot_weeks)   
+    # print(g.number_of_nodes())
+    # exit()
     with open('./psj/Adressa_4w/train/train_datas.pkl', 'rb') as f:
         datas = pickle.load(f)
     datas = make_train_datas()
@@ -82,7 +84,8 @@ def main():
     df[['category', 'subcategory']] = df['category'].str.split('|', n=1, expand=True)
     
     # 3개의 df를 합치기 (ignore_index=True로 인덱스 재설정) - 모든 뉴스 고려
-    combined_news_df = pd.read_csv('./psj/Adressa_4w/history/all_news.tsv', sep='\t')
+    combined_news_df = pd.read_csv('./psj/Adressa_4w/history/all_news_nyheter_splitted.tsv', sep='\t')
+    combined_news_df = combined_news_df.rename(columns={'newsId': 'clicked_news'})
     all_news_ids = combined_news_df['clicked_news'].unique()
     news_num = len(all_news_ids)
     # print("news_num:", news_num)
@@ -150,7 +153,7 @@ def main():
     # 2) 모델에 필요한 정보 추가 준비
     learning_rate = 0.0001
     num_epochs = 10
-    batch_size = 50
+    batch_size = 150
     batch_num = user_num // batch_size if user_num % batch_size == 0 else user_num // batch_size + 1
     emb_dim = Config.num_filters*3   # 300
     history_length = 100
@@ -190,7 +193,7 @@ def main():
         epoch_samples = 0
         prev_batch_cnt = 0
         batch_cnt = 0
-        batch_size = 50
+        batch_size = 150
         for b in tqdm(range(batch_num), desc=f'training {epoch} epoch batches'):
             prev_batch_cnt = batch_cnt
             batch_cnt += batch_size
@@ -294,7 +297,7 @@ def main():
             prev_validation_batch_cnt = 0
             validation_batch_cnt = 0
             n_empty = 0
-            batch_size = 50
+            batch_size = 150
             validation_batch_num = user_num // batch_size if user_num % batch_size == 0 else user_num // batch_size + 1
 
             for validation_b in tqdm(range(validation_batch_num), desc=f'Validating epoch {epoch}'):
@@ -375,7 +378,7 @@ def main():
         else:
             print("[Warning] best checkpoint not found. Evaluate current model instead.")
             
-        batch_size = 50
+        batch_size = 150
         test_batch_num = user_num // batch_size if user_num % batch_size == 0 else user_num // batch_size + 1
         for m in range(1,2):
             prev_test_batch_cnt = 0
