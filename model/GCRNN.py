@@ -8,7 +8,7 @@ import gc
 import random
 from utils.nce_loss import NCELoss
 from utils.full_news_encoder import NewsEncoder
-from config import Config
+from model.config import Config
 
 torch.cuda.set_device(0)
 random_seed = 1024
