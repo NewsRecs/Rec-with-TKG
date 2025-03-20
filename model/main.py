@@ -205,7 +205,7 @@ def main():
             # prev_batch_cnt = 5500
             # b = 11
             # train_users[b], train_news[b], 없애버림
-            ns_val = ns_idx_batch[b] + model.user_num  # shape: (train_click_num, k_neg)
+            ns_val = train_ns_idx_batch[b] + model.user_num  # shape: (train_click_num, k_neg)
             print("min(ns_val) =", ns_val.min().item(), "max(ns_val) =", ns_val.max().item())
             
             loss = model(all_users[prev_batch_cnt:batch_cnt], train_news[prev_batch_cnt:batch_cnt], train_category[prev_batch_cnt:batch_cnt], train_time[prev_batch_cnt:batch_cnt], g, splitted_g, train_ns_idx_batch[b], history_length)
