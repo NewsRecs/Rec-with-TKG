@@ -333,6 +333,10 @@ class GCRNN(nn.Module):
         candidate_user_embs = user_embs#[user_score_idx]   # user_score_idx: (train_click_num, )
         candidate_user_embs = candidate_user_embs.unsqueeze(1)   # (train_click_num, 1, 128)            
         candidate_score = (candidate_user_embs * candidate_n_embs).sum(dim=-1)
+        print("candidate_score shape:", candidate_score.shape)
+        
+        # user_num + news_num - 1 보다 큰 값이나, 0 미만의 값이 있는지 확인
+
         # candidate_n_embs: (train_click_num, emb_dim)*(train_click_num, 5, emb_dim)
         # candidate_score: (train_click_num, 5)
         label_tensor = torch.zeros(len(candidate_score), dtype=torch.long, device=self.device)   # (train_click_num, )
