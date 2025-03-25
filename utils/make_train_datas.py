@@ -63,7 +63,7 @@ def make_train_datas():
     users = history_df['history_user'].unique()
     user2int_df = pd.read_csv(os.path.join('./psj/Adressa_4w/history/', 'user2int.tsv'), sep='\t')
     user2int = user2int_df.set_index('user_id')['user_int'].to_dict()
-    all_user_ids = [i for i in range(users)]   # 0 ~ 84988
+    all_user_ids = [i for i in range(len(users))]   # 0 ~ 84988
 
     # train_df에 ns와 int 추가
     # train_ns['news_int'] = train_ns['clicked_news'].map(news2int_mapping)
