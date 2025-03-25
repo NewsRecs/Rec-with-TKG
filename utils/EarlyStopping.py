@@ -4,7 +4,7 @@ import os
 import torch
 import os  
 
-class EarlyStopping:
+class EarlyStopping: 
     """
     Validation 시 AUC, MRR, nDCG@5, nDCG@10의 평균값(=val_score) 기준 Early Stopping 클래스.
 
