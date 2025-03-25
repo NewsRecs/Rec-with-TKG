@@ -90,10 +90,11 @@ print(df[df['category'].isna()])
 
 # (2-3) user2int 적용
 users = df['history_user'].unique()
-user2int = {uid: i for i, uid in enumerate(users)}
+user2int_df = pd.read_csv(os.path.join('./psj/Adressa_4w/history/', 'user2int.tsv'), sep='\t')
+user2int = user2int_df.set_index('user_id')['user_int'].to_dict()
 df['user_int'] = df['history_user'].map(user2int)
-all_user_ids = sorted([user2int[u] for u in users])
-
+all_user_ids = [i for i in range(len(users))]
+print(len(all_user_ids))
 
 # (2-4) category2int 적용
 # df['category'] = df['category'].fillna('No category|No subcategory')

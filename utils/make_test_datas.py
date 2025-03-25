@@ -34,8 +34,9 @@ def make_test_datas():
     end_time = pd.Timestamp('2017-02-05 08:00:01')
     history_df = history_df[history_df['click_time'] <= end_time]   # 정확히 5주 데이터만 사용하도록 필터링
     users = history_df['history_user'].unique()
-    user2int = {uid: i for i, uid in enumerate(users)}
-    all_user_ids = sorted([user2int[u] for u in users])   # 0 ~ 84988
+    user2int_df = pd.read_csv(os.path.join('./psj/Adressa_4w/history/', 'user2int.tsv'), sep='\t')
+    user2int = user2int_df.set_index('user_id')['user_int'].to_dict()
+    all_user_ids = [i for i in range(users)]   # 0 ~ 84988
 
     test_df['user_int'] = test_df['history_user'].map(user2int)
     test_df['news_int'] = test_df['clicked_news'].map(news2int_mapping)

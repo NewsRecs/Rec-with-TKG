@@ -8,6 +8,8 @@ import pickle
 import dgl
 
 """
+train_ns.tsv를 만드는 파일 (tkg_train_negative_samples_lt36_ns4 -> train_ns; 즉, 후보 뉴스들를 int로 매핑)
+
 test의 data를 처리할 때는 
 train_news_file_path, train_ns_path, train_file_path, train_ns_idx_batch와 train_user_idx_batch 그리고 train_batch를 저장하는 paths
 를 바꿔줘야 함!!!
@@ -65,11 +67,12 @@ news2int_mapping = dict(zip(news2int['news_id'], news2int['news_int']))
 # history_df['click_time'] = pd.to_datetime(history_df['click_time'])
 # end_time = pd.Timestamp('2017-02-05 08:00:01')
 # history_df = history_df[history_df['click_time'] <= end_time]   # 정확히 5주 데이터만 사용하도록 필터링
-history_data_path = './psj/Adressa_4w/history/history_tkg_behaviors.tsv'
-df = pd.read_csv(history_data_path, sep='\t', encoding='utf-8')
-df = df.dropna(subset=['clicked_news'])
-users = df['history_user'].unique()
-user2int = {uid: i for i, uid in enumerate(users)}
+# history_data_path = './psj/Adressa_4w/history/history_tkg_behaviors.tsv'
+# df = pd.read_csv(history_data_path, sep='\t', encoding='utf-8')
+# df = df.dropna(subset=['clicked_news'])
+# users = df['history_user'].unique()
+user2int_df = pd.read_csv('./psj/Adressa_4w/history/user2int.tsv', sep='\t')
+user2int = dict(zip(user2int_df['user_id'], user2int_df['user_int']))
 # all_user_ids = sorted(user2int['user_id'].tolist())
 
 # train_df에 ns와 int 추가

@@ -8,6 +8,8 @@ import pickle
 import dgl
 
 """
+test_ns.tsv를 만드는 파일 (tkg_test_negative_samples_lt36_ns20 -> validation_ns, test_ns; 즉, 후보 뉴스들를 int로 매핑)
+
 test의 data를 처리할 때는 
 train_news_file_path, train_ns_path, train_file_path, train_ns_idx_batch와 train_user_idx_batch 그리고 train_batch를 저장하는 paths
 를 바꿔줘야 함!!!
@@ -61,11 +63,13 @@ news2int_mapping = dict(zip(news2int['news_id'], news2int['news_int']))
 # users = train_df['history_user'].unique()
 # user2int = {uid: i for i, uid in enumerate(users)}
 # all_user_ids = [i for i in range(len(users))]
-history_data_path = './psj/Adressa_4w/history/history_tkg_behaviors.tsv'
-df = pd.read_csv(history_data_path, sep='\t', encoding='utf-8')
-df = df.dropna(subset=['clicked_news'])
-users = df['history_user'].unique()
-user2int = {uid: i for i, uid in enumerate(users)}
+# history_data_path = './psj/Adressa_4w/history/history_tkg_behaviors.tsv'
+# df = pd.read_csv(history_data_path, sep='\t', encoding='utf-8')
+# df = df.dropna(subset=['clicked_news'])
+# users = df['history_user'].unique()
+# user2int = {uid: i for i, uid in enumerate(users)}
+user2int_df = pd.read_csv('./psj/Adressa_4w/history/user2int.tsv', sep='\t')
+user2int = dict(zip(user2int_df['user_id'], user2int_df['user_int']))
 
 # train_df에 ns와 int 추가
 train_ns['news_int'] = train_ns['clicked_news'].map(news2int_mapping)
