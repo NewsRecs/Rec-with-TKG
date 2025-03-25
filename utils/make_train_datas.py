@@ -3,6 +3,7 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 import datetime
+import os
 
 """
 full_news_encoder.py를 사용하기 위해 category2int_pio.tsv로 변경
@@ -60,8 +61,9 @@ def make_train_datas():
     end_time = pd.Timestamp('2017-02-05 08:00:01')
     history_df = history_df[history_df['click_time'] <= end_time]   # 정확히 5주 데이터만 사용하도록 필터링
     users = history_df['history_user'].unique()
-    user2int = {uid: i for i, uid in enumerate(users)}
-    all_user_ids = sorted([user2int[u] for u in users])   # 0 ~ 84988
+    user2int_df = pd.read_csv(os.path.join('./psj/Adressa_4w/history/', 'user2int.tsv'), sep='\t')
+    user2int = user2int_df.set_index('user_id')['user_int'].to_dict()
+    all_user_ids = [i for i in range(users)]   # 0 ~ 84988
 
     # train_df에 ns와 int 추가
     # train_ns['news_int'] = train_ns['clicked_news'].map(news2int_mapping)
