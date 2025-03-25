@@ -28,9 +28,15 @@ def make_test_datas():
     ########################################### 여기부터 negative sampling
     # news2int를 dictionary로 변환
     news2int_mapping = dict(zip(news2int['news_id'], news2int['news_int']))
-    users = test_df['history_user'].unique()
-    all_user_ids = [i for i in range(len(users))]
+    file_path = './psj/Adressa_4w/history/history_tkg_behaviors.tsv'
+    history_df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
+    history_df['click_time'] = pd.to_datetime(history_df['click_time'])
+    end_time = pd.Timestamp('2017-02-05 08:00:01')
+    history_df = history_df[history_df['click_time'] <= end_time]   # 정확히 5주 데이터만 사용하도록 필터링
+    users = history_df['history_user'].unique()
     user2int = {uid: i for i, uid in enumerate(users)}
+    all_user_ids = sorted([user2int[u] for u in users])   # 0 ~ 84988
+
     test_df['user_int'] = test_df['history_user'].map(user2int)
     test_df['news_int'] = test_df['clicked_news'].map(news2int_mapping)
     category2int = pd.read_csv('./psj/Adressa_4w/history/category2int_pio.tsv', sep='\t')

@@ -42,7 +42,7 @@ def main():
     # 0) device 및 batch_size 설정
     torch.cuda.set_device(0)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    batch_size = 150
+    batch_size = 500
     snapshot_weeks = 6   ### history + train
     # device = torch.device("cpu")
 
@@ -152,8 +152,8 @@ def main():
     
     # 2) 모델에 필요한 정보 추가 준비
     learning_rate = 0.0001
-    num_epochs = 10
-    batch_size = 150
+    num_epochs = 20
+    batch_size = 500
     batch_num = user_num // batch_size if user_num % batch_size == 0 else user_num // batch_size + 1
     emb_dim = Config.num_filters*3   # 300
     history_length = 100
@@ -182,7 +182,7 @@ def main():
     
     best_loss = float('inf')   # 7.337717744170642
     check = 0
-    validation_losses = []   # 7.337717744170642, 7.415253834646256
+    validation_metrics = []   # 7.337717744170642, 7.415253834646256
     
     # 4) Batch 학습을 통해 train 수행
     print("Train start !")
@@ -193,7 +193,7 @@ def main():
         epoch_samples = 0
         prev_batch_cnt = 0
         batch_cnt = 0
-        batch_size = 150
+        batch_size = 500
         for b in tqdm(range(batch_num), desc=f'training {epoch} epoch batches'):
             prev_batch_cnt = batch_cnt
             batch_cnt += batch_size
@@ -300,7 +300,7 @@ def main():
             prev_validation_batch_cnt = 0
             validation_batch_cnt = 0
             n_empty = 0
-            batch_size = 150
+            batch_size = 500
             validation_batch_num = user_num // batch_size if user_num % batch_size == 0 else user_num // batch_size + 1
 
             for validation_b in tqdm(range(validation_batch_num), desc=f'Validating epoch {epoch}'):
@@ -345,8 +345,7 @@ def main():
 
             print("# of validation empty batch:", n_empty)
 
-            mean_epoch_loss = np.mean(np.array(epoch_losses_val))
-            validation_losses.append(mean_epoch_loss)
+            # mean_epoch_loss = np.mean(np.array(epoch_losses_val))
 
             # AUC, MRR, nDCG@5, nDCG@10 각각 계산
             val_auc = roc_auc_score(all_labels_val, all_scores_val) if len(set(all_labels_val)) > 1 else 0.0
@@ -356,15 +355,16 @@ def main():
 
             # 4개 지표의 평균값(조기 종료 기준)
             val_score = (val_auc + val_mrr + val_ndcg5 + val_ndcg10) / 4.0
+            validation_metrics.append(val_score)
 
-            print(f"Validation losses: {validation_losses}")
+            print(f"Validation losses: {validation_metrics}")
             print(f"Validation metrics at epoch {epoch}: AUC={val_auc:.4f}, MRR={val_mrr:.4f}, nDCG@5={val_ndcg5:.4f}, nDCG@10={val_ndcg10:.4f}, avg={val_score:.4f}")
 
         # EarlyStopping에 val_score 전달
         es(val_score, model, epoch, learning_rate)
         if es.early_stop:
             print("[EarlyStopping] Training is stopped early.")
-            print(f"Validation_losses: {validation_losses}")
+            print(f"Validation_losses: {validation_metrics}")
             print(f"Best avg metric so far: {es.best_score:.4f}")
             break
         ### 변경사항 끝
@@ -381,7 +381,7 @@ def main():
         else:
             print("[Warning] best checkpoint not found. Evaluate current model instead.")
             
-        batch_size = 150
+        batch_size = 500
         test_batch_num = user_num // batch_size if user_num % batch_size == 0 else user_num // batch_size + 1
         for m in range(1,2):
             prev_test_batch_cnt = 0
@@ -453,4 +453,4 @@ def main():
 
 if __name__ == "__main__":
     main()
- 
+
