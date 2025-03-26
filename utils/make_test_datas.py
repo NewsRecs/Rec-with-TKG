@@ -5,7 +5,7 @@ from tqdm import tqdm
 import os
 
 
-def make_test_datas():
+def make_test_datas(snapshots_num):
     # 각 뉴스의 카테고리만 가져오기
     all_news_df = pd.read_csv('./psj/Adressa_4w/history/all_news_nyheter_splitted.tsv', sep='\t')
     sub_all_news_df = all_news_df[['newsId', 'category']]
@@ -35,6 +35,7 @@ def make_test_datas():
     end_time = pd.Timestamp('2017-02-05 08:00:01')
     history_df = history_df[history_df['click_time'] <= end_time]   # 정확히 5주 데이터만 사용하도록 필터링
     users = history_df['history_user'].unique()
+
     user2int_df = pd.read_csv(os.path.join('./psj/Adressa_4w/history/', 'user2int.tsv'), sep='\t')
     user2int = user2int_df.set_index('user_id')['user_int'].to_dict()
     all_user_ids = [i for i in range(len(users))]   # 0 ~ 84988
@@ -83,7 +84,7 @@ def make_test_datas():
     test_empty_check = []
     for u_id in tqdm(range(len(all_user_ids))):
         u_len = len(test_5d_df[test_5d_df['user_int'] == u_id])
-        u_time = torch.tensor([2015 for _ in range(u_len)], dtype=torch.long)   # train까지 포함한 snapshot 수는 2016개
+        u_time = torch.tensor([snapshots_num for _ in range(u_len)], dtype=torch.long)   # train까지 포함한 snapshot 수는 2016개
         test_time.append(u_time)
         if u_len == 0:
             test_empty_check.append(False)
@@ -102,7 +103,7 @@ def make_test_datas():
     validation_empty_check = []
     for u_id in tqdm(range(len(all_user_ids))):
         u_len = len(validation_df[validation_df['user_int'] == u_id])
-        u_time = torch.tensor([2015 for _ in range(u_len)], dtype=torch.long)   # train까지 포함한 snapshot 수는 2016개
+        u_time = torch.tensor([snapshots_num for _ in range(u_len)], dtype=torch.long)   # train까지 포함한 snapshot 수는 2016개
         validation_time.append(u_time)
         if u_len == 0:
             validation_empty_check.append(False)

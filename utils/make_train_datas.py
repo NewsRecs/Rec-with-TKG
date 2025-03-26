@@ -121,7 +121,7 @@ def make_train_datas():
     train_category: 각 요소(리스트)는 train data에서 각 유저가 클릭한 뉴스의 categories
     - shape: (user_num, train data에서 각 유저의 클릭 수)
 
-    train_time: 각 요소(리스트)는 train data에서 각 유저가 클릭한 뉴스의 times
+    train_time: 각 요소(리스트)는 train data에서 각 유저가 클릭한 뉴스의 times (snapshot or timestamp indicies)
     - shape: (user_num, train data에서 각 유저의 클릭 수)
     """
     train_news = []

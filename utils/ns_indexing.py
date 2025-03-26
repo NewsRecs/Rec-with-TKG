@@ -2,7 +2,7 @@ import torch
 import pandas as pd
 
 
-def ns_indexing(ns_file_path, batch_size=500, user_num=84989):
+def ns_indexing(ns_file_path, batch_size, user_num=84989):
     # ns에 필요한 데이터 저장하는 변수들
     ns_idx_batch = []
     # user_idx_batch = []    

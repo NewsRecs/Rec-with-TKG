@@ -42,8 +42,9 @@ def main():
     # 0) device 및 batch_size 설정
     torch.cuda.set_device(0)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    batch_size = 500
+    original_batch_size = 150
     snapshot_weeks = 6   ### history + train
+    snapshots_num = snapshot_weeks * 7 * 24 * 2   # 2016
     # device = torch.device("cpu")
 
 
@@ -57,11 +58,10 @@ def main():
     g, splitted_g = split_train_graph(snapshot_weeks)   
     # print(g.number_of_nodes())
     # exit()
-    with open('./psj/Adressa_4w/train/train_datas.pkl', 'rb') as f:
-        datas = pickle.load(f)
+    # with open('./psj/Adressa_4w/train/train_datas.pkl', 'rb') as f:
+    #     datas = pickle.load(f)
     datas = make_train_datas()
     train_news, train_category, train_time = zip(*datas)
-    all_users = [i for i in range(84989)]
 
 
     # 사전 학습된 단어 로드
@@ -91,6 +91,8 @@ def main():
     # print("news_num:", news_num)
     
     user_num = len(df['history_user'].unique())
+    all_users = [i for i in range(user_num)]
+    
     # 뉴스별 제목 집계
     news_info = combined_news_df.groupby('clicked_news', as_index=False).agg({
         'title': 'first',
@@ -130,21 +132,21 @@ def main():
 
 
     ### Loading idx_infos for calculating NLL loss
-    train_ns_idx_batch = ns_indexing('./psj/Adressa_4w/train/train_ns.tsv', batch_size)
+    train_ns_idx_batch = ns_indexing('./psj/Adressa_4w/train/train_ns.tsv', original_batch_size)
     # train_user_idx_batch = torch.load('./psj/Adressa_4w/train/train_user_idx_batch.pt')   # 사실 얘는 필요 없음...
 
     
     # test data 로드 시작 ---------------------------------
     # with open('./psj/Adressa_4w/test/validation_datas.pkl', 'rb') as f:
     #     datas = pickle.load(f)
-    val_datas, test_datas = make_test_datas()
+    val_datas, test_datas = make_test_datas(snapshots_num)
     validation_news, validation_time, validation_empty_check = zip(*val_datas)
-    validation_ns_idx_batch = ns_indexing('./psj/Adressa_4w/test/validation_ns.tsv', batch_size)
+    validation_ns_idx_batch = ns_indexing('./psj/Adressa_4w/test/validation_ns.tsv', original_batch_size)
     
     # with open('./psj/Adressa_4w/test/test_datas.pkl', 'rb') as f:
     #     datas = pickle.load(f)
     test_news, test_time, test_empty_check = zip(*test_datas)
-    test_ns_idx_batch = ns_indexing('./psj/Adressa_4w/test/test_ns.tsv', batch_size)
+    test_ns_idx_batch = ns_indexing('./psj/Adressa_4w/test/test_ns.tsv', original_batch_size)
     
     
     print("data loading finished!")
@@ -153,11 +155,11 @@ def main():
     # 2) 모델에 필요한 정보 추가 준비
     learning_rate = 0.0001
     num_epochs = 20
-    batch_size = 500
+    batch_size = original_batch_size
     batch_num = user_num // batch_size if user_num % batch_size == 0 else user_num // batch_size + 1
     emb_dim = Config.num_filters*3   # 300
     history_length = 100
-    snapshots_num = snapshot_weeks * 7 * 24 * 2   # 2016
+    # snapshots_num = snapshot_weeks * 7 * 24 * 2   # 2016
     
     es = EarlyStopping(
         emb_dim=emb_dim,
@@ -193,7 +195,7 @@ def main():
         epoch_samples = 0
         prev_batch_cnt = 0
         batch_cnt = 0
-        batch_size = 500
+        batch_size = original_batch_size
         for b in tqdm(range(batch_num), desc=f'training {epoch} epoch batches'):
             prev_batch_cnt = batch_cnt
             batch_cnt += batch_size
@@ -300,7 +302,7 @@ def main():
             prev_validation_batch_cnt = 0
             validation_batch_cnt = 0
             n_empty = 0
-            batch_size = 500
+            batch_size = original_batch_size
             validation_batch_num = user_num // batch_size if user_num % batch_size == 0 else user_num // batch_size + 1
 
             for validation_b in tqdm(range(validation_batch_num), desc=f'Validating epoch {epoch}'):
@@ -381,7 +383,7 @@ def main():
         else:
             print("[Warning] best checkpoint not found. Evaluate current model instead.")
             
-        batch_size = 500
+        batch_size = original_batch_size
         test_batch_num = user_num // batch_size if user_num % batch_size == 0 else user_num // batch_size + 1
         for m in range(1,2):
             prev_test_batch_cnt = 0
