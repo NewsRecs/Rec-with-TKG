@@ -42,7 +42,7 @@ def main():
     # 0) device 및 batch_size 설정
     torch.cuda.set_device(0)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    original_batch_size = 150
+    original_batch_size = 500
     snapshot_weeks = 6   ### history + train
     snapshots_num = snapshot_weeks * 7 * 24 * 2   # 2016
     # device = torch.device("cpu")
@@ -108,7 +108,7 @@ def main():
     )
     
     # category, subcategory -> index
-    category2int = pd.read_csv('./psj/Adressa_4w/history/category2int_pio.tsv', sep='\t')    
+    category2int = pd.read_csv('category2int_nyheter_splitted.tsv', sep='\t')    
     cat_num = Config.num_categories
     news_info['category_idx'] = news_info['category'].map(category2int.to_dict())
     news_info['subcategory_idx'] = news_info['subcategory'].map(category2int.to_dict())

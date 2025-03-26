@@ -10,11 +10,6 @@ full_news_encoder.py를 사용하기 위해 category2int_pio.tsv로 변경
 """
 
 def make_train_datas():
-    # 각 뉴스의 카테고리만 가져오기
-    all_news_df = pd.read_csv('./psj/Adressa_4w/history/all_news_nyheter_splitted.tsv', sep='\t')
-    sub_all_news_df = all_news_df[['newsId', 'category']]
-
-
 
     # snapshots에 카테고리 정보 추가하기
     # 1. history, train, test에 대해 전역 category2int를 만든다 (이미 있음)
@@ -36,8 +31,6 @@ def make_train_datas():
     train_df = pd.read_csv(train_file_path, sep='\t', encoding='utf-8')
     # 'clicked_news' 열에서 '-1' 제거
     train_df['clicked_news'] = train_df['clicked_news'].str.replace(r'-\d+$', '', regex=True)
-    # 'clicked_newsId'를 기준으로 'category' 매칭
-    train_df = train_df.merge(sub_all_news_df, left_on='clicked_news', right_on='newsId', how='left')
 
     # print(train_df.head())
     # print(train_df.columns)
@@ -79,13 +72,23 @@ def make_train_datas():
     # train_ns['negative_samples'] = train_ns['negative_samples'].apply(map_negative_samples)
     train_df['user_int'] = train_df['history_user'].map(user2int)
     train_df['news_int'] = train_df['clicked_news'].map(news2int_mapping)
-    category2int = pd.read_csv('./psj/Adressa_4w/history/category2int_pio.tsv', sep='\t')
+    category2int = pd.read_csv('category2int_nyheter_splitted.tsv', sep='\t')
     # 필요시 category2int에 'No category' 추가
     if 'No category' not in category2int['category'].values:
         new_row = pd.DataFrame([{'category': 'No category', 'int': 0}])
         category2int = pd.concat([new_row, category2int], ignore_index=True)
     cat2int = category2int.set_index('category')['int'].to_dict()
-    train_df['cat_int'] = train_df['category'].map(cat2int)#.fillna(0)
+    
+    ############# category가 nyheter이면 subcategory로 매핑, 그렇지 않으면 category로 매핑
+    def get_cat_int(row):
+        if row['category'] == 'nyheter':
+            # subcategory를 dict에서 찾되, 없다면 'No category'(또는 0)로 처리
+            return cat2int.get(row['subcategory'], cat2int['No category'])
+        else:
+            return cat2int.get(row['category'], cat2int['No category'])
+
+    train_df['cat_int'] = train_df.apply(get_cat_int, axis=1)
+    
     # has_nan = train_df['cat_int'].isna().any()
     # print("nan exists:", has_nan)
 

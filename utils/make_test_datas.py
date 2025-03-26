@@ -5,10 +5,7 @@ from tqdm import tqdm
 import os
 
 
-def make_test_datas(snapshots_num):
-    # 각 뉴스의 카테고리만 가져오기
-    all_news_df = pd.read_csv('./psj/Adressa_4w/history/all_news_nyheter_splitted.tsv', sep='\t')
-    sub_all_news_df = all_news_df[['newsId', 'category']]
+def make_test_datas(snapshots_num: int):
 
     # news2int 가져오기
     news2int_file_path = './psj/Adressa_4w/history/news2int.tsv'
@@ -17,10 +14,10 @@ def make_test_datas(snapshots_num):
     # a) test dataset(0212 08:00:02 ~ 0219 08:00:01)인 valid_tkg_behaviors.tsv 로드
     test_file_path = './psj/Adressa_4w/test/valid_tkg_behaviors.tsv'
     test_df = pd.read_csv(test_file_path, sep='\t', encoding='utf-8')
+    
     # 'clicked_news' 열에서 '-1' 제거
     test_df['clicked_news'] = test_df['clicked_news'].str.replace(r'-\d+$', '', regex=True)
-    # 'clicked_newsId'를 기준으로 'category' 매칭
-    test_df = test_df.merge(sub_all_news_df, left_on='clicked_news', right_on='newsId', how='left')
+
     # test_df에서 nan이 존재하는 행 제거
     test_df = test_df.dropna(subset=['clicked_news'])
 
@@ -42,13 +39,22 @@ def make_test_datas(snapshots_num):
 
     test_df['user_int'] = test_df['history_user'].map(user2int)
     test_df['news_int'] = test_df['clicked_news'].map(news2int_mapping)
-    category2int = pd.read_csv('./psj/Adressa_4w/history/category2int_pio.tsv', sep='\t')
+    category2int = pd.read_csv('category2int_nyheter_splitted.tsv', sep='\t')
     # 필요시 category2int에 'No category' 추가
     if 'No category' not in category2int['category'].values:
         new_row = pd.DataFrame([{'category': 'No category', 'int': 0}])
         category2int = pd.concat([new_row, category2int], ignore_index=True)
     cat2int = category2int.set_index('category')['int'].to_dict()
-    test_df['cat_int'] = test_df['category'].map(cat2int)#.fillna(0)
+    
+    ############# category가 nyheter이면 subcategory로 매핑, 그렇지 않으면 category로 매핑
+    def get_cat_int(row):
+        if row['category'] == 'nyheter':
+            # subcategory를 dict에서 찾되, 없다면 'No category'(또는 0)로 처리
+            return cat2int.get(row['subcategory'], cat2int['No category'])
+        else:
+            return cat2int.get(row['category'], cat2int['No category'])
+
+    test_df['cat_int'] = test_df.apply(get_cat_int, axis=1)
 
 
 
@@ -84,7 +90,7 @@ def make_test_datas(snapshots_num):
     test_empty_check = []
     for u_id in tqdm(range(len(all_user_ids))):
         u_len = len(test_5d_df[test_5d_df['user_int'] == u_id])
-        u_time = torch.tensor([snapshots_num for _ in range(u_len)], dtype=torch.long)   # train까지 포함한 snapshot 수는 2016개
+        u_time = torch.tensor([snapshots_num-1 for _ in range(u_len)], dtype=torch.long)   # train까지 포함한 snapshot 수는 2016개
         test_time.append(u_time)
         if u_len == 0:
             test_empty_check.append(False)
@@ -103,7 +109,7 @@ def make_test_datas(snapshots_num):
     validation_empty_check = []
     for u_id in tqdm(range(len(all_user_ids))):
         u_len = len(validation_df[validation_df['user_int'] == u_id])
-        u_time = torch.tensor([snapshots_num for _ in range(u_len)], dtype=torch.long)   # train까지 포함한 snapshot 수는 2016개
+        u_time = torch.tensor([snapshots_num-1 for _ in range(u_len)], dtype=torch.long)   # train까지 포함한 snapshot 수는 2016개
         validation_time.append(u_time)
         if u_len == 0:
             validation_empty_check.append(False)
