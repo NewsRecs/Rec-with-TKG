@@ -39,7 +39,7 @@ def ns_indexing(ns_file_path, batch_size, user_num=84989):
         """
         batch_ns_df = ns_df[ns_df['user_int'].isin(batch_user_ids)]
         # user_idx 처리
-        user_tensor = torch.tensor(batch_ns_df['user_int'].tolist(), dtype=torch.long)
+        # user_tensor = torch.tensor(batch_ns_df['user_int'].tolist(), dtype=torch.long)
         # user_idx_batch.append(user_tensor)
         # negative samples 포함한 news_idx 처리
         ns_idx_list = []

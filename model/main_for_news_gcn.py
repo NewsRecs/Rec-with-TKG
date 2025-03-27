@@ -55,7 +55,7 @@ def main():
     
     
     ### history + train snapshots
-    g, splitted_g = split_train_graph(snapshot_weeks)   
+    g, splitted_g = split_train_graph(snapshot_weeks, './psj/Adressa_4w/history/total_graph_full_reciprocal.bin')   
     # print(g.number_of_nodes())
     # exit()
     # with open('./psj/Adressa_4w/train/train_datas.pkl', 'rb') as f:

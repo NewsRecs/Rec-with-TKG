@@ -115,6 +115,7 @@ class GCRNN(nn.Module):
         gcn_seed_1hopedge_per_time = []
         gcn_1hopneighbor_per_time = []
         gcn_seed_2hopedge_per_time = []
+        gcn_seed_2nd_layer_edge_per_time = []   # 2hop_edges를 (src, dst) 형태로 표현하여 담은 리스트
         future_needed_nodes = set()
         check_lifetime = np.zeros(self.user_num)
         for i in range(latest_train_time, -1, -1): # latest -> 0 미래부터 본다.
@@ -140,16 +141,17 @@ class GCRNN(nn.Module):
             hop1_u, hop1_v = sub_g[i].in_edges(v = list(future_needed_nodes), form = 'uv')
             # hop1_u, hop1_v = sub_g[i].in_edges(v = valid_future_nodes, form = 'uv', etype='clicked_reverse')   # u (news) -> v (user) 이다
             ### sub_g를 쓰는 것은 snapshot 시간을 조절하기 위함임 - 해당 시간에 존재하는 edges만 뽑아내려고!!! 
-            # hop1_neighbors_at_i, _, seed_edges_at_i = splitted_g[i].in_edges(v = list(future_needed_nodes), form = 'all')
+            hop1_neighbors_at_i, _, seed_edges_at_i = sub_g[i].in_edges(v = list(future_needed_nodes), form = 'all')
             # node는 그대로 가져와지지만, splitted에서 추출한 edge id는 g의 edge id와 다를 수 있다.
             # 따라서 'edge id'가 아니라 'node id 쌍'로 edge를 기록해야 한다.
+            ### form = 'all': 
 
             # sample한 user들(entity)에 대해 in-edge들 찾는다.
             # hop 1 neighbors는 2layer를 위해 찾아둔것
 
-            # check_lifetime[hop1_neighbors_at_i] = history_length
-            # hop2_edges_at_i = splitted_g[i].in_edges(v = hop1_neighbors_at_i, form = 'eid')
             # 2번째 layer를 위한 edge
+            check_lifetime[hop1_neighbors_at_i] = history_length
+            hop2_u, hop2_v = sub_g[i].in_edges(v = hop1_neighbors_at_i, form = 'uv') # hop2_edges_at_i = sub_g[i].in_edges(v = hop1_neighbors_at_i, form = 'eid')
 
             gcn_seed_per_time.append(list(future_needed_nodes)) # Seed
             # gcn에 seed로 사용되는 entity들이다. 사실 edge를 사용하기는 하지만..
@@ -165,8 +167,19 @@ class GCRNN(nn.Module):
             gcn_seed_1hopedge_per_time.append((hop1_u, hop1_v))
             # gcn_seed_1hopedge_per_time.append((valid_hop1_u, valid_hop1_v)) # Seed's Edge
             
-            #gcn_1hopneighbor_per_time.append(hop1_neighbors_at_i) # Seed's Edge's source node
-            #gcn_seed_2hopedge_per_time.append(hop2_edges_at_i) # Source node's edge
+            gcn_1hopneighbor_per_time.append(hop1_neighbors_at_i) # Seed's Edge's source node
+            gcn_seed_2hopedge_per_time.append((hop2_u, hop2_v)) # Source node's edge
+            ### gcn_seed_2nd_layer_edge_per_time을 만들어야 함 (1hop edge랑 2hop edge를 중복 없이 합쳐야 함)
+            # --- 1-hop, 2-hop 에지를 합쳐서 중복 제거 ---
+            all_hop_u = torch.cat([hop1_u, hop2_u])
+            all_hop_v = torch.cat([hop1_v, hop2_v])
+            
+            # (u, v) 쌍을 [N, 2] 형태로 만든 뒤, 중복 쌍 제거
+            unique_uv = torch.unique(torch.stack([all_hop_u, all_hop_v], dim=1), dim=0)
+            final_u, final_v = unique_uv[:, 0], unique_uv[:, 1]
+            
+            gcn_seed_2nd_layer_edge_per_time.append((final_u, final_v))
+            
             check_lifetime[check_lifetime>0] -= 1
             try:
                 future_needed_nodes = future_needed_nodes - set(np.where(check_lifetime==0)[0]) # seed next
@@ -199,6 +212,15 @@ class GCRNN(nn.Module):
                 user_prev_hn = g.ndata['node_emb'][user_seed_]#.to(self.device1)
                 user_prev_cn = g.ndata['cx'][user_seed_]#.to(self.device1)
 
+                edge_num = len(gcn_seed_2nd_layer_edge_per_time[inverse][0])
+                g.send_and_recv(edges = gcn_seed_2nd_layer_edge_per_time[inverse])
+                if edge_num > 0:
+                    try:
+                        g.ndata['node_emb'] = g.ndata['node_emb2'] + g.ndata['node_emb']
+                        g.ndata.pop('node_emb2')
+                    except:
+                        pass
+                    
                 edge_num = len(gcn_seed_1hopedge_per_time[inverse][0])
                 g.send_and_recv(edges = gcn_seed_1hopedge_per_time[inverse])
                 if edge_num > 0:
@@ -207,9 +229,10 @@ class GCRNN(nn.Module):
                         g.ndata.pop('node_emb2')
                     except:
                         pass
+                
                 user_input = g.ndata['node_emb'][user_seed_]
 
-                user_hn, user_cn = self.user_RNN(user_input, (user_prev_hn, user_prev_cn))
+                user_hn, user_cn = self.user_RNN(user_input, (user_prev_hn, user_prev_cn))   # RNN이 실행되는 time gap이 유저임베딩마다 다름
                 g.ndata['node_emb'][user_seed_] = user_hn
                 g.ndata['cx'][user_seed_] = user_cn
                 seed_emb = g.ndata['node_emb'][list(seed_list[i])]   # user_id 순으로 정렬되진 않음

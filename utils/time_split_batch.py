@@ -6,7 +6,7 @@ from dgl.data.utils import load_graphs
 import numpy as np
 
 
-def split_train_graph(history_week):
+def split_train_graph(history_week, graph_path):
     """
     1) df['Period_Start'] 기준으로 30분 단위 구간을 순회
     2) 각 구간 내에서 user_int를 500명씩 잘라서 edge_subgraph
@@ -15,7 +15,7 @@ def split_train_graph(history_week):
     Returns:
         splitted: list of DGLGraph (각 30분 구간 x 유저 chunk 별)
     """
-    Total_Graph = load_graphs('./psj/Adressa_4w/history/total_graph_full.bin')[0][0]
+    Total_Graph = load_graphs(graph_path)[0][0]
     
     # with open('./psj/Adressa_4w/history/group_users.pickle', 'rb') as f:
     #     seeds = pickle.load(f)

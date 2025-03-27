@@ -167,13 +167,24 @@ g.add_edges(src_edges, dst_edges)
 # 엣지별 cat_idx 저장
 g.edata['cat_idx'] = torch.tensor(cat_idx, dtype=torch.long)
 g.edata['time_idx'] = torch.tensor(edge_time_idx, dtype=torch.long)
+
+
+"""
+reciprocal edges 추가하는 부분
+"""
+### reciprocal edges
+g.add_edges(dst_edges, src_edges)
+# 전체 엣지 데이터가 이 형식 (forward + reciprocal)이 되도록 해줌
+g.edata['cat_idx'][len(cat_idx):] = torch.tensor(cat_idx, dtype=torch.long)
+g.edata['time_idx'][len(edge_time_idx):] = torch.tensor(edge_time_idx, dtype=torch.long)
+
 # print(cat_idx)
 # print(edge_time_idx)
 # print(g)
 # exit()
 
 # (3-1) 전체 그래프 g를 저장 (원한다면)
-g_save_path = "./psj/Adressa_4w/history/total_graph_full.bin"
+g_save_path = "./psj/Adressa_4w/history/total_graph_full_reciprocal.bin"
 save_graphs(g_save_path, [g])
 
 print(g.number_of_nodes())
