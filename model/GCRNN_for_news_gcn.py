@@ -7,7 +7,7 @@ import numpy as np
 import gc
 import random
 from utils.nce_loss import NCELoss
-from utils.full_news_encoder import NewsEncoder
+from utils.full_news_encoder import NewsEncoder 
 from model.config import Config
 
 torch.cuda.set_device(0)
@@ -109,7 +109,7 @@ class GCRNN(nn.Module):
                                                                # 위 주석처럼 할 경우 batch로 나눠서 GCN을 실행하기 때문에 오류 발생 가능성
                                                                # 다시 new_feat으로 생성하는 방식 사용        
 
-    
+    """여기부터 하자 - news 포함 GCN 완성을 위해..!"""
     def seq_GCRNN_batch(self, g, sub_g, latest_train_time, seed_list, history_length):
         gcn_seed_per_time = []
         gcn_seed_1hopedge_per_time = []
@@ -130,12 +130,6 @@ class GCRNN(nn.Module):
             # 따라서 해당 seed들은 과거에도 계속 seed에 들어가게 되지만, 과거에 edge가 존재하는지 여부는 모름
             # 또한 history length가 full(100)인 현 상황에서는 초반(앞 시간대)구간의 경우 seed수가 계속 같을 수 있음
             # 또한, 데이터 특성상 과거로 갈 수록 edge가 적음
-
-            # # future_needed_nodes가 (g에 대한) global_id인데 sub_g에서 future_needed_nodes를 사용해 발생하는 문제 해결
-            # sub_g_user_ids = sub_g[i].nodes['user'].data['user_ids'].tolist()
-            # global_to_local_user = {gid: local for local, gid in enumerate(sub_g_user_ids)}
-            # valid_future_nodes = [global_to_local_user[gid] for gid in future_needed_nodes if gid in global_to_local_user]
-
             
             # 1hop edges of seed at i
             hop1_u, hop1_v = sub_g[i].in_edges(v = list(future_needed_nodes), form = 'uv')
@@ -296,10 +290,13 @@ class GCRNN(nn.Module):
         for i in range(latest_train_time+1):
             seed_list.append(set())
             
-        for time_list, user in zip(time_batch, user_batch):
-            for time in time_list:
-                seed_list[time].add(user)  
+        for time_list, user, news_list in zip(time_batch, user_batch, news_batch):
+            news_list = (news_list + self.user_num).tolist()
+            for time, news in zip(time_list[1:], news_list[:-1]):
+                seed_list[time].add(user)
+                seed_list[time].add(news)  
                 seed_entid.append(user)
+                seed_entid.append(news)
                 train_t.append(time)
                 
         ent_embs = self.seq_GCRNN_batch(g, sub_g, latest_train_time, seed_list, history_length)

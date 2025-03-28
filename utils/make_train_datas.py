@@ -22,22 +22,11 @@ def make_train_datas():
     news2int_file_path = './psj/Adressa_4w/history/news2int.tsv'
     news2int = pd.read_csv(news2int_file_path, sep='\t')
 
-    # # train_ns data 가져오기
-    # train_ns_path = "./psj/Adressa_4w/train/tkg_train_negative_samples_lt36_ns4.tsv"
-    # train_ns = pd.read_csv(train_ns_path, sep='\t')
-
     # a) train dataset(0205 08:00:02 ~ 0212 08:00:01)인 valid_tkg_behaviors.tsv 로드
     train_file_path = './psj/Adressa_4w/train/valid_tkg_behaviors.tsv'
     train_df = pd.read_csv(train_file_path, sep='\t', encoding='utf-8')
     # 'clicked_news' 열에서 '-1' 제거
     train_df['clicked_news'] = train_df['clicked_news'].str.replace(r'-\d+$', '', regex=True)
-
-    # print(train_df.head())
-    # print(train_df.columns)
-    # print(train_df.isna().sum())
-    # print(train_df[train_df.isna()]) # 하나가 데이터 오류
-    # print(len(train_df))
-    # exit()
 
     # train_df에서 nan이 존재하는 행 제거
     train_df = train_df.dropna(subset=['clicked_news'])
@@ -58,17 +47,6 @@ def make_train_datas():
     user2int = user2int_df.set_index('user_id')['user_int'].to_dict()
     all_user_ids = [i for i in range(len(users))]   # 0 ~ 84988
 
-    # train_df에 ns와 int 추가
-    # train_ns['news_int'] = train_ns['clicked_news'].map(news2int_mapping)
-    # def map_negative_samples(ns_str):
-    #     if pd.isna(ns_str):
-    #         return ns_str
-    #     # 공백으로 분리하여 개별 뉴스 아이디 리스트 생성
-    #     news_ids = ns_str.split()
-    #     # 각 뉴스 아이디를 매핑 (없는 경우 -1 또는 원하는 기본값으로 대체)
-    #     news_ints = [str(news2int_mapping.get(nid, -1)) for nid in news_ids]
-    #     # 다시 공백으로 연결하여 문자열 형태로 반환
-    #     return " ".join(news_ints)
     # train_ns['negative_samples'] = train_ns['negative_samples'].apply(map_negative_samples)
     train_df['user_int'] = train_df['history_user'].map(user2int)
     train_df['news_int'] = train_df['clicked_news'].map(news2int_mapping)
@@ -89,15 +67,6 @@ def make_train_datas():
 
     train_df['cat_int'] = train_df.apply(get_cat_int, axis=1)
     
-    # has_nan = train_df['cat_int'].isna().any()
-    # print("nan exists:", has_nan)
-
-    # # nan 개수 세기
-    # nan_count = train_df['cat_int'].isna().sum()
-    # print("Number of nan values:", nan_count)
-
-    # # print(train_df['category'].values)
-    # exit()
 
     # period_start -> time_idx 매핑(0부터 시작)
     def get_period_start(click_time, interval_minutes=1440, start_time=datetime.time(8, 0, 2)):

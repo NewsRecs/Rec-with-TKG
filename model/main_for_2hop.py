@@ -334,7 +334,7 @@ def main():
                 for i in range(real_batch_size):
                     y_score = candidate_score[i]
                     y_true = np.zeros(num_candidates, dtype=int)
-                    y_true[0] = 1  # 첫 번째가 정답이라고 가정
+                    y_true[0] = 1  # 첫 번째가 정답
 
                     # AUC 계산 위해 전체 스코어/라벨 저장
                     all_scores_val.extend(y_score)

@@ -15,7 +15,7 @@ check, batch size 로직 두 개랑 print들만 바꿈
 """
 
 import sys
-import os
+import os 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import torch
