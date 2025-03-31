@@ -12,7 +12,7 @@ import numpy as np
 from utils.make_train_datas import make_train_datas
 from utils.make_test_datas import make_test_datas
 from utils.time_split_batch import split_train_graph
-from model.GCRNN import GCRNN
+from model.GCRNN_for_2hop import GCRNN
 from utils.ns_indexing import ns_indexing
 from utils.evaluate import ndcg_score, mrr_score
 from sklearn.metrics import roc_auc_score

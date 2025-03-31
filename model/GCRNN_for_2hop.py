@@ -117,7 +117,7 @@ class GCRNN(nn.Module):
         gcn_seed_2hopedge_per_time = []
         gcn_seed_2nd_layer_edge_per_time = []   # 2hop_edges를 (src, dst) 형태로 표현하여 담은 리스트
         future_needed_nodes = set()
-        check_lifetime = np.zeros(self.user_num)
+        check_lifetime = np.zeros(self.user_num + self.news_num)
         for i in range(latest_train_time, -1, -1): # latest -> 0 미래부터 본다.
             # print(len(future_needed_nodes))
             
@@ -169,11 +169,28 @@ class GCRNN(nn.Module):
             
             gcn_1hopneighbor_per_time.append(hop1_neighbors_at_i) # Seed's Edge's source node
             gcn_seed_2hopedge_per_time.append((hop2_u, hop2_v)) # Source node's edge
+
+            # 에지가 전혀 없는 timestamp에서는 스킵
+            if len(hop1_u) == 0 and len(hop2_u) == 0:
+                gcn_seed_2nd_layer_edge_per_time.append((torch.tensor([], dtype=torch.long),
+                                                        torch.tensor([], dtype=torch.long)))
+                continue
             ### gcn_seed_2nd_layer_edge_per_time을 만들어야 함 (1hop edge랑 2hop edge를 중복 없이 합쳐야 함)
             # --- 1-hop, 2-hop 에지를 합쳐서 중복 제거 ---
             all_hop_u = torch.cat([hop1_u, hop2_u])
             all_hop_v = torch.cat([hop1_v, hop2_v])
             
+            # ##### check
+            # print("hop1_u shape:", hop1_u.shape, "hop1_v shape:", hop1_v.shape)
+            # print("hop2_u shape:", hop2_u.shape, "hop2_v shape:", hop2_v.shape)
+            # print("all_hop_u shape:", all_hop_u.shape, "all_hop_v shape:", all_hop_v.shape)
+
+            # stacked = torch.stack([all_hop_u, all_hop_v], dim=1)
+            # print("stacked shape:", stacked.shape)
+            # unique_uv = torch.unique(stacked, dim=0)
+            # print("unique_uv shape:", unique_uv.shape)
+
+
             # (u, v) 쌍을 [N, 2] 형태로 만든 뒤, 중복 쌍 제거
             unique_uv = torch.unique(torch.stack([all_hop_u, all_hop_v], dim=1), dim=0)
             final_u, final_v = unique_uv[:, 0], unique_uv[:, 1]

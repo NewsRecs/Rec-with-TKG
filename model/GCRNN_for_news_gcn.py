@@ -46,7 +46,7 @@ class GCRNN(nn.Module):
     4) Loss 계산
     5) Backpropagation
     """
-    def __init__(self, all_news_ids, news_id_to_info, user_num, cat_num, news_num, pretrained_word_embedding=None, emb_dim=100, batch_size=500, snapshots_num=1680):
+    def __init__(self, all_news_ids, news_id_to_info, user_num, cat_num, news_num, pretrained_word_embedding=None, emb_dim=300, batch_size=500, snapshots_num=2016):
         """
         학습 대상
         1. user embeddings
@@ -71,6 +71,7 @@ class GCRNN(nn.Module):
         # self.prev_hn = nn.Embedding(num_embeddings=user_num, embedding_dim=emb_dim, sparse = False).to(self.device)   # for hidden state in LSTM_GCN
         self.c0_embedding_layer_u = nn.Embedding(num_embeddings=user_num+news_num, embedding_dim=emb_dim, sparse = False).to(self.device)   # for cell state in LSTM_GCN
         self.user_RNN = nn.LSTMCell(emb_dim, emb_dim, bias = True).to(self.device)   # input dim, hn dim
+        self.news_RNN = nn.LSTMCell(emb_dim, emb_dim, bias = True).to(self.device)   # input dim, hn dim
         # News_Encoder에 필요한 정보들
         self.config = Config
         self.pretrained_word_embedding = pretrained_word_embedding
@@ -111,13 +112,16 @@ class GCRNN(nn.Module):
 
     """여기부터 하자 - news 포함 GCN 완성을 위해..!"""
     def seq_GCRNN_batch(self, g, sub_g, latest_train_time, seed_list, history_length):
+        """
+        seed_list: news 포함!
+        """
         gcn_seed_per_time = []
         gcn_seed_1hopedge_per_time = []
         gcn_1hopneighbor_per_time = []
         gcn_seed_2hopedge_per_time = []
         gcn_seed_2nd_layer_edge_per_time = []   # 2hop_edges를 (src, dst) 형태로 표현하여 담은 리스트
         future_needed_nodes = set()
-        check_lifetime = np.zeros(self.user_num)
+        check_lifetime = np.zeros(self.user_num + self.news_num)
         for i in range(latest_train_time, -1, -1): # latest -> 0 미래부터 본다.
             # print(len(future_needed_nodes))
             
@@ -125,7 +129,7 @@ class GCRNN(nn.Module):
             # 이때 뉴스 인덱스는 유저 인덱스의 최대치만큼 다 더한 상태로 저장돼야 함 그래야 check_lifetime의 인덱스 형태로 들어갈 수 있으니까!
             check_lifetime[list(seed_list[i])] = history_length # seed_list: time별로 seed user가 들어있음
 
-            # seed list에 들어있는 user들을 future needed nodes에 추가함(과거로 미래를 initialize하기 때문)
+            # seed list에 들어있는 user, news들을 future needed nodes에 추가함(과거로 미래를 initialize하기 때문)
             future_needed_nodes = future_needed_nodes.union(torch.tensor(list(seed_list[i])).tolist())
             # 따라서 해당 seed들은 과거에도 계속 seed에 들어가게 되지만, 과거에 edge가 존재하는지 여부는 모름
             # 또한 history length가 full(100)인 현 상황에서는 초반(앞 시간대)구간의 경우 seed수가 계속 같을 수 있음
@@ -167,9 +171,11 @@ class GCRNN(nn.Module):
             # --- 1-hop, 2-hop 에지를 합쳐서 중복 제거 ---
             all_hop_u = torch.cat([hop1_u, hop2_u])
             all_hop_v = torch.cat([hop1_v, hop2_v])
+            ### hop1_u,v의 shape: n, hop2_u,v의 shape: m이라 하자
+            ### all_hop_u, v의 shape: n + m 
             
             # (u, v) 쌍을 [N, 2] 형태로 만든 뒤, 중복 쌍 제거
-            unique_uv = torch.unique(torch.stack([all_hop_u, all_hop_v], dim=1), dim=0)
+            unique_uv = torch.unique(torch.stack([all_hop_u, all_hop_v], dim=1), dim=0)   # shape: (n+m, 2); ((u0, v0), ..., (u_j, v_j))
             final_u, final_v = unique_uv[:, 0], unique_uv[:, 1]
             
             gcn_seed_2nd_layer_edge_per_time.append((final_u, final_v))
@@ -199,13 +205,17 @@ class GCRNN(nn.Module):
             inverse = latest_train_time - i   # 1680-i
             # gcn_seed_per_time -> 미래부터 들어있다
             if len(gcn_seed_per_time[inverse]) > 0:   # inverse를 했을 때, gcn_seed_per_time이 애초에 시간 역순이라, 다시 시간 순서대로 보겠다는 의미
-                changed = sorted(gcn_seed_per_time[inverse])   # 해당 time의 seed user 리스트를 user_id 순으로 정렬
+                changed = sorted(gcn_seed_per_time[inverse])   # 해당 time의 seed user/news 리스트를 user_int, news_int 순으로 정렬
 
-                user_seed_ = changed   # g.nodes['user'].data['user_ids']
-                # print(user_seed_)
+                seed_ = torch.tensor(changed)   # g.nodes['user'].data['user_ids']
+                user_seed_ = seed_[seed_ < self.user_num]
+                news_seed_ = seed_[seed_ >= self.user_num]
+                # user/news의 prev timestamp의 input
                 user_prev_hn = g.ndata['node_emb'][user_seed_]#.to(self.device1)
                 user_prev_cn = g.ndata['cx'][user_seed_]#.to(self.device1)
-
+                news_prev_hn = g.ndata['node_emb'][news_seed_]#.to(self.device1)
+                news_prev_cn = g.ndata['cx'][news_seed_]
+                # GCN
                 edge_num = len(gcn_seed_2nd_layer_edge_per_time[inverse][0])
                 g.send_and_recv(edges = gcn_seed_2nd_layer_edge_per_time[inverse])
                 if edge_num > 0:
@@ -224,16 +234,25 @@ class GCRNN(nn.Module):
                     except:
                         pass
                 
+                # user/news RNN input (GCN 적용 후)
                 user_input = g.ndata['node_emb'][user_seed_]
+                news_input = g.ndata['node_emb'][news_seed_]
 
+                # RNN
                 user_hn, user_cn = self.user_RNN(user_input, (user_prev_hn, user_prev_cn))   # RNN이 실행되는 time gap이 유저임베딩마다 다름
+                news_hn, news_cn = self.news_RNN(news_input, (news_prev_hn, news_prev_cn))   # RNN이 실행되는 time gap이 뉴스임베딩마다 다름
+
+                # RNN outputs 할당
                 g.ndata['node_emb'][user_seed_] = user_hn
                 g.ndata['cx'][user_seed_] = user_cn
-                seed_emb = g.ndata['node_emb'][list(seed_list[i])]   # user_id 순으로 정렬되진 않음
-                user_changed_in_global = torch.tensor(list(seed_list[i])) * latest_train_time + i   # user_id 순으로 index 크기가 정렬되게 함
+                g.ndata['node_emb'][news_seed_] = news_hn
+                g.ndata['cx'][news_seed_] = news_cn
+
+                user_seed_emb = g.ndata['node_emb'][list(seed_list[i][seed_list[i] < self.user_num])]   # user_id 순으로 정렬되진 않음; user만 반환
+                user_changed_in_global = torch.tensor(list(seed_list[i][seed_list[i] < self.user_num])) * latest_train_time + i   # user_id 순으로 index 크기가 정렬되게 함
                 # 같은 유저라도 timestamp에 따라 고유한 index를 갖도록 해줌
                 # 즉, 각 user_changed_in_global은 유저의 고유한 embedding 순서를 나타냄
-                entity_embs.append(seed_emb)   # 아직 user_id 순으로 정렬되지 않은 embeddings
+                entity_embs.append(user_seed_emb)   # 아직 user_id 순으로 정렬되지 않은 embeddings
                 entity_index.append(user_changed_in_global.type(torch.FloatTensor))
 
         # for i in range(len(entity_embs)):
@@ -243,12 +262,11 @@ class GCRNN(nn.Module):
         #     print(entity_index[i].shape)
         # exit()
         entity_embs = torch.cat(entity_embs).to(self.device)   # (각 snapshot마다 존재하는 유저 수의 총 합, emb_dim)
-                                                               # 우리 방법의 경우, 각 유저가 모두 마지막 seed_list(seed_list[1679])에만 존재
                                                                # -> 실제 크기는 (batch_size, emb_dim)
         # print(entity_embs.shape)
         # print(len(entity_index))
 
-        # entity_index torch.cat 전: len=100(각 요소: [0], [0], ..., [500]), 후: shape=(500,)
+        # entity_index torch.cat 전: len=100 (각 요소: [0], [0], ..., [500]), 후: shape=(500,)
         entity_index = torch.cat(entity_index)   # entity_index의 값들을 순서대로 정렬할 때, 이들의 indicies를 순서대로 반환
                                                  # shape: (각 snapshot마다 존재하는 user_num * snapshots_num, )
                                                  # 따라서 entity_index는 각 user의 idx를 갖고 있는 것과 같음
@@ -420,3 +438,4 @@ class GCRNN(nn.Module):
         loss = nce_loss(candidate_score, label_tensor)   
         
         return candidate_score, loss
+
