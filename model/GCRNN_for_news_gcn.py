@@ -167,6 +167,13 @@ class GCRNN(nn.Module):
             
             gcn_1hopneighbor_per_time.append(hop1_neighbors_at_i) # Seed's Edge's source node
             gcn_seed_2hopedge_per_time.append((hop2_u, hop2_v)) # Source node's edge
+
+            # 에지가 전혀 없는 timestamp에서는 스킵
+            if len(hop1_u) == 0 and len(hop2_u) == 0:
+                gcn_seed_2nd_layer_edge_per_time.append((torch.tensor([], dtype=torch.long),
+                                                        torch.tensor([], dtype=torch.long)))
+                continue
+
             ### gcn_seed_2nd_layer_edge_per_time을 만들어야 함 (1hop edge랑 2hop edge를 중복 없이 합쳐야 함)
             # --- 1-hop, 2-hop 에지를 합쳐서 중복 제거 ---
             all_hop_u = torch.cat([hop1_u, hop2_u])
