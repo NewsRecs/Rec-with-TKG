@@ -15,6 +15,7 @@ from utils.time_split_batch import split_train_graph
 from model.GCRNN_for_2hop import GCRNN
 from utils.ns_indexing import ns_indexing
 from utils.evaluate import ndcg_score, mrr_score
+from utils.EarlyStopping import EarlyStopping
 from sklearn.metrics import roc_auc_score
 from model.config import Config
 import dgl
@@ -162,6 +163,16 @@ def main():
 
     best_ckpt_path = "./best_model_ckpt.pth"
 
+    # (2) EarlyStopping 객체 생성
+    early_stopper = EarlyStopping(
+        emb_dim=emb_dim,      # emb_dim 등 모델 설정에 맞춰 전달
+        patience=3,           # 개선 없으면 3epoch 후 스탑(예시)
+        min_delta=1e-4,
+        ckpt_dir=f'./Adressa_7w/test/2_hop_no_val_ckpt/bs_{original_batch_size}_lr_{learning_rate}', 
+        verbose=True,
+        save_all=False        # True로 설정하면 매 epoch마다 체크포인트 저장
+    )
+
     print("Train start !")
     print(f"# of batch: {batch_num}, # of user: {user_num}, "
           f"batch size: {batch_size}, lr: {learning_rate}, "
@@ -276,37 +287,41 @@ def main():
                   f"nDCG@5={final_ndcg5:.4f}, nDCG@10={final_ndcg10:.4f}, "
                   f"avg={avg_metric:.4f}, (empty batch={empty_batch_count})\n")
 
-            # 베스트 모델 갱신 여부 체크
-            if avg_metric > best_score:
-                best_score = avg_metric
-                best_epoch = epoch
+            old_best_score = early_stopper.best_score  # 업데이트 전 점수
+            early_stopper(val_score=avg_metric, model=model, epoch=epoch, lr=learning_rate)
+
+            # best_score가 업데이트되었으면 해당 지표 저장
+            if early_stopper.best_score != old_best_score:
                 best_auc = final_auc
                 best_mrr = final_mrr
                 best_ndcg5 = final_ndcg5
                 best_ndcg10 = final_ndcg10
-                # 모델 저장
-                torch.save(model.state_dict(), best_ckpt_path)
-                print(f"[Epoch {epoch}] **Best model updated** "
-                      f"with avg metric = {best_score:.4f}")
+
+            if early_stopper.early_stop:
+                print("[EarlyStopping] Training is stopped.")
+                break  # epoch 루프 종료
+
+        if early_stopper.early_stop:
+            break  # 메인 학습 루프 종료
 
     # -----------------------------
-    # 전체 epoch 종료 후,
+    # 전체 epoch 종료 or early stop 후,
     # 베스트 모델 다시 로드해서 최종 결과 출력
     # -----------------------------
     print("\n=== Training finished. Loading best checkpoint for final report ===")
-    if os.path.exists(best_ckpt_path):
-        model.load_state_dict(torch.load(best_ckpt_path))
-        print(f"[Info] Best checkpoint (epoch={best_epoch}, avg_metric={best_score:.4f}) loaded.")
+    if early_stopper.best_ckpt_path is not None and os.path.exists(early_stopper.best_ckpt_path):
+        model.load_state_dict(torch.load(early_stopper.best_ckpt_path))
+        print(f"[Info] Best checkpoint (epoch={early_stopper.best_epoch}, avg_score={early_stopper.best_score:.4f}) loaded.")
     else:
         print("[Warning] Best checkpoint file not found. Using last model state.")
 
-    # 최종 결과 (베스트 에폭 기준) 출력
-    print(f"\n[Training Completed] Best Test Performance (at epoch={best_epoch}):")
+    # 최종 결과 (베스트 모델 기준) 출력
+    print(f"\n[Training Completed] Best Test Performance (epoch={early_stopper.best_epoch}):")
     print(f" - AUC     : {best_auc:.4f}")
     print(f" - MRR     : {best_mrr:.4f}")
     print(f" - nDCG@5  : {best_ndcg5:.4f}")
     print(f" - nDCG@10 : {best_ndcg10:.4f}")
-    print(f" - avg     : {best_score:.4f}\n")
+    print(f" - avg     : {early_stopper.best_score:.4f}\n")
 
 
 if __name__ == "__main__":
