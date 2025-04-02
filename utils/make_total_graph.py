@@ -97,10 +97,6 @@ all_user_ids = [i for i in range(len(users))]
 print(len(all_user_ids))
 
 # (2-4) category2int 적용
-# df['category'] = df['category'].fillna('No category|No subcategory')
-# df[['Category', 'Subcategory']] = df['category'].str.split('|', n=1, expand=True)
-
-
 category2int = pd.read_csv('category2int_nyheter_splitted.tsv', sep='\t')
 # 필요시 category2int에 'No category' 추가
 if 'No category' not in category2int['category'].values:
@@ -137,8 +133,21 @@ for i in range(len(df['time_idx'].unique())):
 #     exit()
 #     time_idx_ordered.extend(group_df['time_idx'].tolist())
 
+# (2-5) category_count 적용
+category_count = pd.read_csv("combined_category_count.tsv", sep="\t")
+cat2count = category_count.set_index('category')['count'].to_dict()
+def get_cat_count(row):
+    if row['category'] == 'nyheter':
+        # subcategory를 dict에서 찾되, 없다면 'No category'(또는 0)로 처리
+        return cat2count.get(row['subcategory'], cat2count['No category'])
+    else:
+        return cat2count.get(row['category'], cat2count['No category'])
 
-# (2-5) df 인덱스를 0부터 차례대로 재정렬 -> 그래프 생성 시 forward edge와 df 행 1:1 매핑
+df['category_count'] = df.apply(get_cat_int, axis=1)
+df = pd.merge(df, category_count, on='category', how='left')
+
+
+# (2-6) df 인덱스를 0부터 차례대로 재정렬 -> 그래프 생성 시 forward edge와 df 행 1:1 매핑
 df = df.reset_index(drop=True)
 
 num_news_nodes = len(news2int) 
@@ -149,7 +158,7 @@ src_edges = df['news_int'].values + num_user_nodes      # (forward) news 노드
 dst_edges = df['user_int'].values      # (forward) user 노드
 cat_idx = df['category_int'].values    # 각 edge의 카테고리 인덱스
 edge_time_idx = df['time_idx'].values  # 각 edge(행)의 time_idx
-
+cat_counts = df['category_count'].values    # 각 edge(행)의 카테고리 수
 
 
 # forward edges: ('user','clicked','news') = (dst_edges, src_edges)

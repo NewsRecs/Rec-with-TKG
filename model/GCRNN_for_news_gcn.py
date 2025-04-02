@@ -408,24 +408,25 @@ class GCRNN(nn.Module):
         seed_list = []
         seed_entid = []
         test_t = []
-        
-        for time_list in time_batch:
-            for time in time_list:
-                test_t.append(time)
-        
-        latest_train_time = 2015   # train까지 포함한 snapshot 수는 2016개
-        seed_entid = []
-        test_t = []
+        latest_train_time = self.snapshots_num - 1
         for i in range(latest_train_time+1):
             seed_list.append(set())
-        for time_list, user in zip(time_batch, user_batch):
-            for time in time_list:
-                seed_list[time].add(user)  
+            
+        for time_list, user, news_list in zip(time_batch, user_batch, news_batch):
+            news_list = (news_list + self.user_num).tolist()
+            for time, news in zip(time_list, news_list):
+                seed_list[time].add(user)
+                seed_list[time].add(news)  
                 seed_entid.append(user)
+                seed_entid.append(news)
                 test_t.append(time)
+                test_t.append(time)   # news가 seed에 포함됐기 때문에 seed_entid와 길이를 맞춰야 함
 
         ent_embs = self.seq_GCRNN_batch(g, sub_g, latest_train_time, seed_list, history_length)   # (batch_size, emb_dim)
-        _, index_for_ent_emb = torch.unique(torch.tensor(seed_entid) * latest_train_time + torch.tensor(test_t), 
+        
+        seed_entid_t = torch.tensor(seed_entid)
+        user_mask = seed_entid_t < self.user_num
+        _, index_for_ent_emb = torch.unique(torch.tensor(seed_entid)[user_mask] * latest_train_time + torch.tensor(test_t)[user_mask], 
                                             sorted = True, return_inverse = True)
         # (batch_size, )
         u_time_embs = ent_embs[index_for_ent_emb]
