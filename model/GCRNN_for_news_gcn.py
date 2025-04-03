@@ -310,8 +310,8 @@ class GCRNN(nn.Module):
         for i in range(latest_train_time+1):
             seed_list.append(set())
             
-        for time_list, user, news_list in zip(time_batch, user_batch, news_batch):
-            news_list = (news_list + self.user_num).tolist()
+        for time_list, user, news_tensor in zip(time_batch, user_batch, news_batch):
+            news_list = (news_tensor + self.user_num).tolist()
             for time, news in zip(time_list, news_list):
                 seed_list[time].add(user)
                 seed_list[time].add(news)  

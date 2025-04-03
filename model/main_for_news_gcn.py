@@ -326,3 +326,109 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+    def forward(self, user_batch, news_batch, category_batch, time_batch, g, sub_g, ns_idx, history_length=100): # user_batch, news_batch,
+        """
+        g: DGL 이종 그래프
+           - etype = ('user', 'clicked', 'news'),
+                     ('user', 'clicked_reverse', 'news')
+           - 
+        #    - g.nodes['user'].data['feat'], g.nodes['news'].data['feat'] 에는
+        #      노드 임베딩이 저장되어 있음.
+           - g.edges['clicked'].data['feat'] 에는 user -> news 방향의 엣지 임베딩이 저장되어 있음.
+           - g.edges['clicked_reverse'].data['feat'] 에는 news-> user 방향의 엣지 임베딩이 저장되어 있음.
+           - g.nodes['user'].data['user_ids']에는 user_ids가 tensor 형태로 저장되어 있음. (user_num, 1)
+           - g.nodes['news'].data['news_ids']에는 news_ids가 tensor 형태로 저장되어 있음. (news_num, 1)
+        #    - g.edges['clicked'].data['category_id']에는 category_ids가 tensor 형태로 저장되어 있음. (cat_num, 1)
+        #    - g.edges['clicked_reverse'].data['category_id']에는 category_ids가 tensor 형태로 저장되어 있음. (cat_num, 1)
+        
+        snapshots_user_ids: snapshot마다 저장된 유저 id
+
+        return:
+            updated_user_feats: (num_users, emb_dim)
+            updated_news_feats: (num_news, emb_dim)
+        """
+        # print(f"[Before] GPU 메모리 사용량: {torch.cuda.memory_allocated(self.device)/1024**2:.2f} MiB")
+        
+        seed_list = []
+        seed_entid = []
+        train_t = []
+        latest_train_time = self.snapshots_num - 1
+        for i in range(latest_train_time+1):
+            seed_list.append(set())
+            
+        for time_list, user, news_list in zip(time_batch, user_batch, news_batch):
+            news_list = (news_list + self.user_num).tolist()
+            for time, news in zip(time_list, news_list):
+                seed_list[time].add(user)
+                seed_list[time].add(news)  
+                seed_entid.append(user)
+                seed_entid.append(news)
+                train_t.append(time)
+                train_t.append(time)   # news가 seed에 포함됐기 때문
+                
+        ent_embs = self.seq_GCRNN_batch(g, sub_g, latest_train_time, seed_list, history_length)
+        
+        seed_entid_t = torch.tensor(seed_entid)
+        user_mask = seed_entid_t < self.user_num
+        _, index_for_ent_emb = torch.unique(torch.tensor(seed_entid)[user_mask] * latest_train_time + torch.tensor(train_t)[user_mask], 
+                                            sorted = True, return_inverse = True)
+        # 각 rnn의 마지막 hidden state, 즉 rnn 결과로 얻은 각 유저의 embedding indicies를 저장한 tensor
+        # index_for_ent_emb: unique 값들의 indicies를 모아둔 tensor
+        # 즉, seed_entid의 train_click_num만큼 존재하는 user indicies
+        
+        # for index in index_for_ent_emb:
+        #     print(index)
+        # print(index_for_ent_emb.shape)
+        # print('\n')
+        # print(len(train_t))
+        # for tt in train_t:
+        #     print(tt)
+        # print('\n')
+        # print(len(seed_entid))
+        # for sid in seed_entid:    
+        #     print(sid)
+        # exit()
+        
+        user_embs = ent_embs[index_for_ent_emb]   # (train_click_num, 128)
+                                                  # 이게 아마 정답) user_embs는 seed_entid 순으로 정렬된 user embeddings
+                                                  # 즉, user_embs가 이미 내가 원하는 candidate_user_embs 형태!!!
+        # print(entity_index.shape)
+        # print(ent_embs.shape)
+        # print(index_for_ent_emb.shape)
+        # print(user_embs.shape)
+        # exit()
+
+        # 각 유저의 GCRNN 후 embeddings
+        # *** userid 순으로 정렬됨 ***
+        # train_click_num만큼 복사해줘야 함
+        
+        # u_time_embs = torch.cat([user_emb_0, user_embs]) # (N, emb_dim)   왜 합쳤니???????????? 난 어떻게 해야 하지...
+
+        # target_n_embs = g.nodes['news'].data['node_emb'][news_batch] # (N, emb_dim)
+        # 원본: target_c_embs = self.ent_embedding_layer(torch.cat(comp_target_0).to(self.device0) + self.user_id_max + 1) # (N, emb_dim)
+        # comp_target_0: 각 회사별 첫 번째 시간대의 news embedding의 indicies를 먼저 각각 하나의 list에 추가하고, 이후 각 회사별 첫 번째 외의 시간대 tensor가 순서대로 쌓여 있음
+        
+        """
+        user_embs: (click 수, emb_dim)
+        candidate_n_embs: (click 수, 9, emb_dim)
+        내적 후 score: (click 수, 9)
+        label: (click 수,) (예: 모든 값이 0, 즉 첫 번째 후보가 정답)
+        """
+        # target_n_embs = g.nodes['news'].data['node_emb'][news_batch]   # (target_news_num, emb_dim); target_news_num은 batch마다 다름
+        # target_score = torch.matmul(user_embs, target_n_embs.transpose(1,0))   # (batch_size=500, target_news_num)
+        candidate_n_embs = g.ndata['node_emb'][ns_idx + self.user_num]   
+        # g.nodes['news'].data['node_emb']는 news_int 순서대로 embedding 저장한 텐서; shape: (news_num, emb_dim)
+        # candidate_n_embs: (train_click_num, (1 + 4), emb_dim); 1: target, 4: ns sample 수
+        # ns_idx: (train_click_num, 5)
+        candidate_user_embs = user_embs#[user_score_idx]   # user_score_idx: (train_click_num, )
+        candidate_user_embs = candidate_user_embs.unsqueeze(1)   # (train_click_num, 1, 128)            
+        candidate_score = (candidate_user_embs * candidate_n_embs).sum(dim=-1)
+        # print("candidate_score shape:", candidate_score.shape)
+        # candidate_n_embs: (train_click_num, emb_dim)*(train_click_num, 5, emb_dim)
+        # candidate_score: (train_click_num, 5)
+        label_tensor = torch.zeros(len(candidate_score), dtype=torch.long, device=self.device)   # (train_click_num, )
+        nce_loss = NCELoss()
+        loss = nce_loss(candidate_score, label_tensor)   
+
+        return loss

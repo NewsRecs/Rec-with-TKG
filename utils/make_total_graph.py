@@ -55,6 +55,7 @@ train_df = pd.read_csv(train_data_path, sep='\t', encoding='utf-8')
 train_df['clicked_news'] = train_df['clicked_news'].str.replace(r'-\d+$', '', regex=True)
 train_df = train_df[train_df.notna()]
 
+# history + train df
 df = pd.concat([df, train_df])
 
 # click_time이 string일 경우 datetime으로 변환

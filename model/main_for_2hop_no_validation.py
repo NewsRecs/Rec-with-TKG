@@ -25,7 +25,7 @@ def main():
     # 0) device 및 batch_size 설정
     torch.cuda.set_device(0)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    original_batch_size = 500
+    original_batch_size = 150
     snapshot_weeks = 6   ### history + train
     snapshots_num = snapshot_weeks * 7 * 24 * 2   # 2016
     # device = torch.device("cpu")
@@ -189,7 +189,7 @@ def main():
         batch_cnt = 0
         batch_size = original_batch_size
 
-        for b in tqdm(range(batch_num), desc=f'Training Epoch {epoch}'):
+        for b in tqdm(range(batch_num), desc=f'Training Epoch {epoch}', miniters=5, leave=False):
             prev_batch_cnt = batch_cnt
             batch_cnt += batch_size
             if batch_cnt > len(train_news):
@@ -235,7 +235,7 @@ def main():
             test_batch_cnt = 0
             empty_batch_count = 0
 
-            for test_b in tqdm(range(test_batch_num), desc=f'Testing Epoch {epoch}'):
+            for test_b in tqdm(range(test_batch_num), desc=f'Testing Epoch {epoch}', miniters=5, leave=False):
                 prev_test_batch_cnt = test_batch_cnt
                 test_batch_cnt += original_batch_size
                 if test_batch_cnt > len(test_news):
