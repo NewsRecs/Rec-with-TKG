@@ -144,7 +144,7 @@ def get_cat_count(row):
     else:
         return cat2count.get(row['category'], cat2count['No category'])
 
-df['category_count'] = df.apply(get_cat_int, axis=1)
+df['category_count'] = df.apply(get_cat_count, axis=1)
 df = pd.merge(df, category_count, on='category', how='left')
 
 
@@ -177,6 +177,7 @@ g.add_edges(src_edges, dst_edges)
 # 엣지별 cat_idx 저장
 g.edata['cat_idx'] = torch.tensor(cat_idx, dtype=torch.long)
 g.edata['time_idx'] = torch.tensor(edge_time_idx, dtype=torch.long)
+g.edata['cat_count'] = torch.tensor(cat_counts, dtype=torch.long)
 
 
 """
@@ -187,6 +188,7 @@ g.add_edges(dst_edges, src_edges)
 # 전체 엣지 데이터가 이 형식 (forward + reciprocal)이 되도록 해줌
 g.edata['cat_idx'][len(cat_idx):] = torch.tensor(cat_idx, dtype=torch.long)
 g.edata['time_idx'][len(edge_time_idx):] = torch.tensor(edge_time_idx, dtype=torch.long)
+g.edata['cat_count'][len(cat_counts):] = torch.tensor(cat_counts, dtype=torch.long)
 
 # print(cat_idx)
 # print(edge_time_idx)
