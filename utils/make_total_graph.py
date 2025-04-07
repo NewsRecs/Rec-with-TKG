@@ -11,6 +11,7 @@ from dgl.data.utils import save_graphs
 
 """
 full_news_encoder.py를 사용하기 위해 category2int_pio로 변경함
+cat_count 추가됨 for category weight
 """
 
 # exit()
@@ -145,7 +146,6 @@ def get_cat_count(row):
         return cat2count.get(row['category'], cat2count['No category'])
 
 df['category_count'] = df.apply(get_cat_count, axis=1)
-df = pd.merge(df, category_count, on='category', how='left')
 
 
 # (2-6) df 인덱스를 0부터 차례대로 재정렬 -> 그래프 생성 시 forward edge와 df 행 1:1 매핑
