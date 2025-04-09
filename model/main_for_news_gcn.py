@@ -21,6 +21,10 @@ from model.config import Config
 import dgl
 
 
+
+random_seed = 1024
+random.seed(random_seed)
+
 def main():
     # 0) device 및 batch_size 설정
     torch.cuda.set_device(0)
