@@ -19,6 +19,7 @@ from utils.EarlyStopping import EarlyStopping
 from sklearn.metrics import roc_auc_score
 from model.config import Config
 import dgl
+import random
 
 
 random_seed = 1024
