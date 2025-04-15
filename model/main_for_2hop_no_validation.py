@@ -20,9 +20,10 @@ from sklearn.metrics import roc_auc_score
 from model.config import Config
 import dgl
 import random
+import wandb
 
 
-random_seed = 1024
+random_seed = 28
 random.seed(random_seed)
 
 def main():
@@ -135,6 +136,17 @@ def main():
     batch_num = user_num // batch_size if user_num % batch_size == 0 else user_num // batch_size + 1
     emb_dim = Config.num_filters * 3  # 예: 300
     history_length = 100
+    
+    # wandb 초기화 및 config 설정
+    wandb.init(project="Adressa_project", config={
+        "learning_rate": learning_rate,
+        "num_epochs": num_epochs,
+        "batch_size": original_batch_size,
+        "emb_dim": emb_dim,
+        "history_length": history_length,
+        "snapshot_weeks": snapshot_weeks,
+        "snapshots_num": snapshots_num,
+    })
 
     # 3) 모델 초기화
     model = GCRNN(
@@ -154,6 +166,9 @@ def main():
         weight_decay=0.01
     )
 
+    # 모델 파라미터 및 그라디언트 로깅 설정 (옵션)
+    wandb.watch(model, log="all")
+    
     # 학습 과정에서의 로스 기록
     all_losses = []
 
@@ -291,6 +306,18 @@ def main():
                   f"nDCG@5={final_ndcg5:.4f}, nDCG@10={final_ndcg10:.4f}, "
                   f"avg={avg_metric:.4f}, (empty batch={empty_batch_count})\n")
 
+            # wandb에 테스트 지표 로깅
+            wandb.log({
+                # "epoch": epoch,
+                "train_loss": epoch_loss,
+                "auc": final_auc,
+                "mrr": final_mrr,
+                "ndcg5": final_ndcg5,
+                "ndcg10": final_ndcg10,
+                "avg_score": avg_metric,
+                "empty_batch_count": empty_batch_count,
+            })
+            
             old_best_score = early_stopper.best_score  # 업데이트 전 점수
             early_stopper(val_score=avg_metric, model=model, epoch=epoch, lr=learning_rate)
 
@@ -327,6 +354,8 @@ def main():
     print(f" - nDCG@10 : {best_ndcg10:.4f}")
     print(f" - avg     : {early_stopper.best_score:.4f}\n")
 
+    # wandb 세션 종료
+    wandb.finish()
 
 if __name__ == "__main__":
     main()

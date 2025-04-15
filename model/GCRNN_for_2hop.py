@@ -11,7 +11,7 @@ from utils.full_news_encoder import NewsEncoder
 from model.config import Config
 
 torch.cuda.set_device(0)
-random_seed = 1024
+random_seed = 28
 random.seed(random_seed)
 torch.manual_seed(random_seed)
 
