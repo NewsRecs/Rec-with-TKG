@@ -23,6 +23,8 @@ import random
 import wandb
 
 
+os.environ["WANDB_API_KEY"] = "632a992df3cb5a9e7c74dce28e08a8d01229018e"
+
 random_seed = 28
 random.seed(random_seed)
 
@@ -138,7 +140,7 @@ def main():
     history_length = 100
     
     # wandb 초기화 및 config 설정
-    wandb.init(project="Adressa_project", config={
+    wandb.init(project="TKG_for_NewsRec", config={
         "learning_rate": learning_rate,
         "num_epochs": num_epochs,
         "batch_size": original_batch_size,
@@ -146,7 +148,7 @@ def main():
         "history_length": history_length,
         "snapshot_weeks": snapshot_weeks,
         "snapshots_num": snapshots_num,
-    })
+    }, name=f"{snapshot_weeks + 1}w Adressa_batch size {original_batch_size}_seed {random_seed}")
 
     # 3) 모델 초기화
     model = GCRNN(
