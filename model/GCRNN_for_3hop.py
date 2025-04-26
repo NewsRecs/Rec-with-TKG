@@ -115,7 +115,12 @@ class GCRNN(nn.Module):
         gcn_seed_1hopedge_per_time = []
         gcn_1hopneighbor_per_time = []
         gcn_seed_2hopedge_per_time = []
-        gcn_seed_2nd_layer_edge_per_time = []   # 2hop_edges를 (src, dst) 형태로 표현하여 담은 리스트
+        gcn_seed_2nd_layer_edge_per_time = []   # 1/2-hop edges를 (src, dst) 형태로 표현하여 담은 리스트
+        # for 3-hop
+        gcn_2hopneighbor_per_time = []
+        gcn_seed_3hopedge_per_time = []
+        gcn_seed_3rd_layer_edge_per_time = []   # 1/2/3-hop edges를 (src, dst) 형태로 표현하여 담은 리스트
+        
         future_needed_nodes = set()
         check_lifetime = np.zeros(self.user_num + self.news_num)
         for i in range(latest_train_time, -1, -1): # latest -> 0 미래부터 본다.
@@ -136,7 +141,7 @@ class GCRNN(nn.Module):
             # global_to_local_user = {gid: local for local, gid in enumerate(sub_g_user_ids)}
             # valid_future_nodes = [global_to_local_user[gid] for gid in future_needed_nodes if gid in global_to_local_user]
 
-            
+            # -------------- 1‑, 2‑hop(원래 코드) ----------------
             # 1hop edges of seed at i
             hop1_u, hop1_v = sub_g[i].in_edges(v = list(future_needed_nodes), form = 'uv')
             # hop1_u, hop1_v = sub_g[i].in_edges(v = valid_future_nodes, form = 'uv', etype='clicked_reverse')   # u (news) -> v (user) 이다
@@ -152,6 +157,13 @@ class GCRNN(nn.Module):
             # 2번째 layer를 위한 edge
             check_lifetime[hop1_neighbors_at_i] = history_length
             hop2_u, hop2_v = sub_g[i].in_edges(v = hop1_neighbors_at_i, form = 'uv') # hop2_edges_at_i = sub_g[i].in_edges(v = hop1_neighbors_at_i, form = 'eid')
+            # ---------------------------------------------------
+
+            # -------------- *** 3‑hop 추가 *** ------------------
+            hop2_neighbors_at_i = hop2_u                        # 2‑hop에서 들어온 user 노드
+            check_lifetime[hop2_neighbors_at_i] = history_length
+            hop3_u, hop3_v = sub_g[i].in_edges(v=hop2_neighbors_at_i, form='uv')
+            # ---------------------------------------------------
 
             gcn_seed_per_time.append(list(future_needed_nodes)) # Seed
             # gcn에 seed로 사용되는 entity들이다. 사실 edge를 사용하기는 하지만..
@@ -229,6 +241,16 @@ class GCRNN(nn.Module):
                 user_prev_hn = g.ndata['node_emb'][user_seed_]#.to(self.device1)
                 user_prev_cn = g.ndata['cx'][user_seed_]#.to(self.device1)
 
+                # 3-hop information aggregated
+                edge_num = len(gcn_seed_3rd_layer_edge_per_time[inverse][0])
+                g.send_and_recv(edges = gcn_seed_3rd_layer_edge_per_time[inverse])
+                if edge_num > 0:
+                    try:
+                        g.ndata['node_emb'] = g.ndata['node_emb2'] + g.ndata['node_emb']
+                        g.ndata.pop('node_emb2')
+                    except:
+                        pass
+                # 2-hop information aggregated
                 edge_num = len(gcn_seed_2nd_layer_edge_per_time[inverse][0])
                 g.send_and_recv(edges = gcn_seed_2nd_layer_edge_per_time[inverse])
                 if edge_num > 0:
@@ -237,7 +259,7 @@ class GCRNN(nn.Module):
                         g.ndata.pop('node_emb2')
                     except:
                         pass
-                    
+                # 1-hop information aggregated    
                 edge_num = len(gcn_seed_1hopedge_per_time[inverse][0])
                 g.send_and_recv(edges = gcn_seed_1hopedge_per_time[inverse])
                 if edge_num > 0:
