@@ -165,7 +165,7 @@ def main():
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=learning_rate,
-        weight_decay=0.01
+        weight_decay=0.01 
     )
 
     # 모델 파라미터 및 그라디언트 로깅 설정 (옵션)
