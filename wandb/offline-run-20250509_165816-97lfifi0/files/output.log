@@ -1,0 +1,13 @@
+Train start !
+# of batch: 431, # of user: 64541, batch size: 150, lr: 0.0001, embedding dim: 300, history_length: 100
+training 1 epoch batches:   8%|█▌                  | 34/431 [2:21:16<27:29:37, 249.31s/it]
+Traceback (most recent call last):
+  File "model/main_for_1hop_1w.py", line 441, in <module>
+    main()
+  File "model/main_for_1hop_1w.py", line 301, in main
+    loss.backward()   # calculate gradient
+  File "/home/user/anaconda3/envs/pio/lib/python3.6/site-packages/torch/_tensor.py", line 307, in backward
+    torch.autograd.backward(self, gradient, retain_graph, create_graph, inputs=inputs)
+  File "/home/user/anaconda3/envs/pio/lib/python3.6/site-packages/torch/autograd/__init__.py", line 156, in backward
+    allow_unreachable=True, accumulate_grad=True)  # allow_unreachable flag
+TypeError: keyboard_interrupt_handler() takes 1 positional argument but 2 were given

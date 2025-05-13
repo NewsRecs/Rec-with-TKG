@@ -1,0 +1,35 @@
+2025-05-12 18:11:28,469 INFO    MainThread:3587564 [wandb_setup.py:_flush():76] Configure stats pid to 3587564
+2025-05-12 18:11:28,469 INFO    MainThread:3587564 [wandb_setup.py:_flush():76] Loading settings from /home/user/.config/wandb/settings
+2025-05-12 18:11:28,469 INFO    MainThread:3587564 [wandb_setup.py:_flush():76] Loading settings from /home/user/pyo/Rec-with-TKG/wandb/settings
+2025-05-12 18:11:28,469 INFO    MainThread:3587564 [wandb_setup.py:_flush():76] Loading settings from environment variables: {'api_key': '***REDACTED***', 'mode': 'offline'}
+2025-05-12 18:11:28,469 INFO    MainThread:3587564 [wandb_setup.py:_flush():76] Inferring run settings from compute environment: {'program_relpath': 'model/main_for_1hop_7w.py', 'program': 'model/main_for_1hop_7w.py'}
+2025-05-12 18:11:28,469 INFO    MainThread:3587564 [wandb_init.py:_log_setup():461] Logging user logs to /home/user/pyo/Rec-with-TKG/wandb/offline-run-20250512_181128-lgwu94xv/logs/debug.log
+2025-05-12 18:11:28,469 INFO    MainThread:3587564 [wandb_init.py:_log_setup():462] Logging internal logs to /home/user/pyo/Rec-with-TKG/wandb/offline-run-20250512_181128-lgwu94xv/logs/debug-internal.log
+2025-05-12 18:11:28,469 INFO    MainThread:3587564 [wandb_init.py:init():495] calling init triggers
+2025-05-12 18:11:28,469 INFO    MainThread:3587564 [wandb_init.py:init():499] wandb.init called with sweep_config: {}
+config: {'learning_rate': 0.0001, 'num_epochs': 10, 'batch_size': 150, 'emb_dim': 300, 'history_length': 100, 'snapshot_weeks': 6, 'snapshots_num': 2016}
+2025-05-12 18:11:28,469 INFO    MainThread:3587564 [wandb_init.py:init():548] starting backend
+2025-05-12 18:11:28,470 INFO    MainThread:3587564 [backend.py:_multiprocessing_setup():99] multiprocessing start_methods=fork,spawn,forkserver, using: spawn
+2025-05-12 18:11:28,576 INFO    MainThread:3587564 [backend.py:ensure_launched():217] starting backend process...
+2025-05-12 18:11:28,682 INFO    MainThread:3587564 [backend.py:ensure_launched():222] started backend process with pid: 3602865
+2025-05-12 18:11:28,683 INFO    MainThread:3587564 [wandb_init.py:init():558] backend started and connected
+2025-05-12 18:11:28,690 INFO    MainThread:3587564 [wandb_init.py:init():634] updated telemetry
+2025-05-12 18:11:28,923 INFO    MainThread:3587564 [wandb_init.py:init():700] starting run threads in backend
+2025-05-12 18:11:30,718 INFO    MainThread:3587564 [wandb_run.py:_console_start():1893] atexit reg
+2025-05-12 18:11:30,719 INFO    MainThread:3587564 [wandb_run.py:_redirect():1766] redirect: SettingsConsole.REDIRECT
+2025-05-12 18:11:30,720 INFO    MainThread:3587564 [wandb_run.py:_redirect():1771] Redirecting console.
+2025-05-12 18:11:30,722 INFO    MainThread:3587564 [wandb_run.py:_redirect():1827] Redirects installed.
+2025-05-12 18:11:30,722 INFO    MainThread:3587564 [wandb_init.py:init():732] run started, returning control to user process
+2025-05-12 18:11:31,297 INFO    MainThread:3587564 [wandb_watch.py:watch():47] Watching
+2025-05-12 18:12:40,393 INFO    MainThread:3587564 [wandb_run.py:_atexit_cleanup():1862] got exitcode: 1
+2025-05-12 18:12:40,394 INFO    MainThread:3587564 [wandb_run.py:_restore():1834] restore
+2025-05-12 18:12:42,771 INFO    MainThread:3587564 [wandb_run.py:_on_finish():1991] got exit ret: 
+2025-05-12 18:12:42,930 INFO    MainThread:3587564 [wandb_run.py:_on_finish():1991] got exit ret: 
+2025-05-12 18:12:43,033 INFO    MainThread:3587564 [wandb_run.py:_on_finish():1991] got exit ret: done: true
+exit_result {
+}
+local_info {
+}
+
+2025-05-12 18:12:44,162 INFO    MainThread:3587564 [wandb_run.py:_footer_history_summary_info():3099] rendering history
+2025-05-12 18:12:44,163 INFO    MainThread:3587564 [wandb_run.py:_footer_history_summary_info():3131] rendering summary

@@ -23,7 +23,7 @@ def split_train_graph(history_week, graph_path):
         
     splitted = []
     # seed_list = []
-    for i in range(history_week*7*24*2):
+    for i in range(int(history_week*7*24*2)):
         # 해당 batch_user_ids가 클릭한 df 행만 추출
         # time_window_users = seeds[i]
         # batch_src = group[batch_mask]['news_int'].values

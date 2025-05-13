@@ -19,11 +19,11 @@ def make_train_datas():
 
 
     # news2int 가져오기
-    news2int_file_path = './psj/Adressa_4w/history/news2int.tsv'
+    news2int_file_path = '/home/user/pyo/psj/Adressa_4w/history/news2int.tsv'
     news2int = pd.read_csv(news2int_file_path, sep='\t')
 
     # a) train dataset(0205 08:00:02 ~ 0212 08:00:01)인 valid_tkg_behaviors.tsv 로드
-    train_file_path = './psj/Adressa_4w/train/valid_tkg_behaviors.tsv'
+    train_file_path = '/home/user/pyo/psj/Adressa_4w/train/valid_tkg_behaviors.tsv'
     train_df = pd.read_csv(train_file_path, sep='\t', encoding='utf-8')
     # 'clicked_news' 열에서 '-1' 제거
     train_df['clicked_news'] = train_df['clicked_news'].str.replace(r'-\d+$', '', regex=True)
@@ -37,20 +37,20 @@ def make_train_datas():
     # news2int를 dictionary로 변환
     news2int_mapping = dict(zip(news2int['news_id'], news2int['news_int']))
     # user2int mapping
-    file_path = './psj/Adressa_4w/history/history_tkg_behaviors.tsv'
+    file_path = '/home/user/pyo/psj/Adressa_4w/history/history_tkg_behaviors.tsv'
     history_df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
     history_df['click_time'] = pd.to_datetime(history_df['click_time'])
     end_time = pd.Timestamp('2017-02-05 08:00:01')
     history_df = history_df[history_df['click_time'] <= end_time]   # 정확히 5주 데이터만 사용하도록 필터링
     users = history_df['history_user'].unique()
-    user2int_df = pd.read_csv(os.path.join('./psj/Adressa_4w/history/', 'user2int.tsv'), sep='\t')
+    user2int_df = pd.read_csv(os.path.join('/home/user/pyo/psj/Adressa_4w/history/', 'user2int.tsv'), sep='\t')
     user2int = user2int_df.set_index('user_id')['user_int'].to_dict()
     all_user_ids = [i for i in range(len(users))]   # 0 ~ 84988
 
     # train_ns['negative_samples'] = train_ns['negative_samples'].apply(map_negative_samples)
     train_df['user_int'] = train_df['history_user'].map(user2int)
     train_df['news_int'] = train_df['clicked_news'].map(news2int_mapping)
-    category2int = pd.read_csv('category2int_nyheter_splitted.tsv', sep='\t')
+    category2int = pd.read_csv('/home/user/pyo/category2int_nyheter_splitted.tsv', sep='\t')
     # 필요시 category2int에 'No category' 추가
     if 'No category' not in category2int['category'].values:
         new_row = pd.DataFrame([{'category': 'No category', 'int': 0}])

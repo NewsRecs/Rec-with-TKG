@@ -1,0 +1,31 @@
+Train start !
+# of batch: 567, # of user: 84989, batch size: 150, lr: 0.0001, embedding dim: 300, history_length: 100
+
+
+Training Epoch 1:   0%|                                 | 1/567 [00:39<6:14:23, 39.69s/it]Exception in thread NetStatThr:
+Traceback (most recent call last):
+  File "/home/user/anaconda3/envs/pio/lib/python3.6/threading.py", line 916, in _bootstrap_inner
+    self.run()
+  File "/home/user/anaconda3/envs/pio/lib/python3.6/threading.py", line 864, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/user/anaconda3/envs/pio/lib/python3.6/site-packages/wandb/sdk/wandb_run.py", line 152, in check_network_status
+    status_response = self._interface.communicate_network_status()
+  File "/home/user/anaconda3/envs/pio/lib/python3.6/site-packages/wandb/sdk/interface/interface.py", line 138, in communicate_network_status
+    resp = self._communicate_network_status(status)
+  File "/home/user/anaconda3/envs/pio/lib/python3.6/site-packages/wandb/sdk/interface/interface_shared.py", line 405, in _communicate_network_status
+    resp = self._communicate(req, local=True)
+  File "/home/user/anaconda3/envs/pio/lib/python3.6/site-packages/wandb/sdk/interface/interface_shared.py", line 226, in _communicate
+    return self._communicate_async(rec, local=local).get(timeout=timeout)
+  File "/home/user/anaconda3/envs/pio/lib/python3.6/site-packages/wandb/sdk/interface/interface_shared.py", line 231, in _communicate_async
+    raise Exception("The wandb backend process has shutdown")
+Exception: The wandb backend process has shutdown
+Traceback (most recent call last):
+  File "model/main_for_2hop_no_validation.py", line 364, in <module>
+    main()
+  File "model/main_for_2hop_no_validation.py", line 231, in main
+    loss.backward()
+  File "/home/user/anaconda3/envs/pio/lib/python3.6/site-packages/torch/_tensor.py", line 307, in backward
+    torch.autograd.backward(self, gradient, retain_graph, create_graph, inputs=inputs)
+  File "/home/user/anaconda3/envs/pio/lib/python3.6/site-packages/torch/autograd/__init__.py", line 156, in backward
+    allow_unreachable=True, accumulate_grad=True)  # allow_unreachable flag
+TypeError: keyboard_interrupt_handler() takes 1 positional argument but 2 were given

@@ -27,6 +27,9 @@ os.environ["WANDB_API_KEY"] = "632a992df3cb5a9e7c74dce28e08a8d01229018e"
 
 random_seed = 28
 random.seed(random_seed)
+np.random.seed(28); torch.manual_seed(28)
+if torch.cuda.is_available(): torch.cuda.manual_seed_all(28)
+
 
 def main():
     # 0) device 및 batch_size 설정
@@ -45,7 +48,8 @@ def main():
     ### history + train snapshots
     g, splitted_g = split_train_graph(
         snapshot_weeks, 
-        './psj/Adressa_4w/history/total_graph_full_reciprocal.bin'
+        '/home/user/pyo/psj/Adressa_4w/history/total_graph_full_reciprocal.bin'
+        # './psj/Adressa_4w/history/total_graph_full_reciprocal.bin'
     )
     
     # Train 데이터 로드
@@ -54,11 +58,11 @@ def main():
 
     # 사전 학습된 단어 로드
     word2int = pd.read_csv(
-        os.path.join('./psj/Adressa_4w/history/', 'word2int.tsv'), 
+        os.path.join('/home/user/pyo/psj/Adressa_4w/history/', 'word2int.tsv'), 
         sep='\t'
     )
     word_to_idx = word2int.set_index('word')['int'].to_dict()
-    embedding_file_path = os.path.join('./psj/Adressa_4w/history/', 'pretrained_word_embedding.npy')
+    embedding_file_path = os.path.join('/home/user/pyo/psj/Adressa_4w/history/', 'pretrained_word_embedding.npy')
     embeddings = np.load(embedding_file_path)
     pretrained_word_embedding = torch.tensor(embeddings, dtype=torch.float, device=device)   # (330900, 100)
     
@@ -67,19 +71,19 @@ def main():
         """2.2) 타이틀을 공백 기준으로 단순 토크나이징"""
         return title.split()
 
-    file_path = './psj/Adressa_4w/history/history_tkg_behaviors.tsv'
+    file_path = '/home/user/pyo/psj/Adressa_4w/history/history_tkg_behaviors.tsv'
     df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
     df['category'] = df['category'].fillna('No category|No subcategory')
     df[['category', 'subcategory']] = df['category'].str.split('|', n=1, expand=True)
     
     # 전체 뉴스 정보 로드
     combined_news_df = pd.read_csv(
-        './psj/Adressa_4w/history/all_news_nyheter_splitted.tsv', 
+        '/home/user/pyo/psj/Adressa_4w/history/all_news_nyheter_splitted.tsv', 
         sep='\t'
     ).rename(columns={'newsId': 'clicked_news'})
     
     all_news_ids = pd.read_csv(
-        './psj/Adressa_4w/history/news2int.tsv', 
+        '/home/user/pyo/psj/Adressa_4w/history/news2int.tsv', 
         sep='\t'
     )['news_id']
     news_num = len(all_news_ids)
@@ -100,11 +104,19 @@ def main():
         ]
     )
     
-    category2int = pd.read_csv('category2int_nyheter_splitted.tsv', sep='\t')    
+    category2int = pd.read_csv('/home/user/pyo/category2int_nyheter_splitted.tsv', sep='\t')    
     cat_num = Config.num_categories
-    # category, subcategory를 index로
-    news_info['category_idx'] = news_info['category'].map(category2int.to_dict())
-    news_info['subcategory_idx'] = news_info['subcategory'].map(category2int.to_dict())
+    
+    # category와 subcategory 매핑 딕셔너리 생성
+    category_map = category2int.set_index('category')['int'].to_dict()
+    news_info['category_idx'] = news_info['category'].map(category_map).fillna(0).astype(int)
+    news_info['subcategory_idx'] = news_info['subcategory'].map(category_map).fillna(0).astype(int)
+    
+    # 3) 범위 검증
+    max_idx = int(max(news_info['category_idx'].max(),
+                    news_info['subcategory_idx'].max()))
+    assert max_idx < Config.num_categories, f"Config.num_categories({Config.num_categories}) must be > max idx {max_idx}"
+
     
     # 필요한 컬럼만 news_info_df 생성
     news_info_df = news_info[['clicked_news', 'title_idx', 'category_idx', 'subcategory_idx']]\
@@ -117,7 +129,7 @@ def main():
     
     # Negative sampling 인덱스 로드
     train_ns_idx_batch = ns_indexing(
-        './psj/Adressa_4w/train/train_ns.tsv', 
+        '/home/user/pyo/psj/Adressa_4w/train/train_ns.tsv', 
         original_batch_size
     )
     
@@ -126,7 +138,7 @@ def main():
     #    여기서는 validation이 필요 없으므로 val_datas는 사용 X
     test_datas, _ = make_test_datas(snapshots_num)
     test_news, test_time, test_empty_check = zip(*test_datas)
-    test_ns_idx_batch = ns_indexing('./psj/Adressa_4w/test/validation_ns.tsv', original_batch_size)
+    test_ns_idx_batch = ns_indexing('/home/user/pyo/psj/Adressa_4w/test/validation_ns.tsv', original_batch_size)
     # validation_ns가 train 직후의 3.5일에 대한 데이터이기 때문에 ns_indexing의 input으로 적합함
     
     print("data loading finished!")
@@ -140,7 +152,7 @@ def main():
     history_length = 100
     
     # wandb 초기화 및 config 설정
-    wandb.init(project="TKG_for_NewsRec", config={
+    wandb.init(project="TKG_for_NewsRec_precise_category", config={
         "learning_rate": learning_rate,
         "num_epochs": num_epochs,
         "batch_size": original_batch_size,
@@ -189,7 +201,7 @@ def main():
         emb_dim=emb_dim,      # emb_dim 등 모델 설정에 맞춰 전달
         patience=3,           # 개선 없으면 3epoch 후 스탑(예시)
         min_delta=1e-4,
-        ckpt_dir=f'./Adressa_7w/test/2_hop_no_val_ckpt/bs_{original_batch_size}_lr_{learning_rate}', 
+        ckpt_dir=f'/home/user/pyo/Adressa_7w/test/2_hop_no_val_ckpt/bs_{original_batch_size}_lr_{learning_rate}', 
         verbose=True,
         save_all=False        # True로 설정하면 매 epoch마다 체크포인트 저장
     )
@@ -279,7 +291,7 @@ def main():
                 )
 
                 candidate_score = candidate_score.cpu().numpy()
-                for i in range(real_batch_size):
+                for i in range(candidate_score.shape[0]):   # real_batch_size
                     y_score = candidate_score[i]
                     # 첫 번째가 정답
                     y_true = np.zeros(len(y_score), dtype=int)

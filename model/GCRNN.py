@@ -11,7 +11,7 @@ from utils.full_news_encoder import NewsEncoder
 from model.config import Config
 
 torch.cuda.set_device(0)
-random_seed = 1024
+random_seed = 28
 random.seed(random_seed)
 torch.manual_seed(random_seed)
 
@@ -272,12 +272,20 @@ class GCRNN(nn.Module):
         latest_train_time = self.snapshots_num - 1
         for i in range(latest_train_time+1):
             seed_list.append(set())
-            
+        
+        # print(len(seed_list))
+        # print(len(time_batch))
+        # print(len(user_batch))
         for time_list, user in zip(time_batch, user_batch):
             for time in time_list:
-                seed_list[time].add(user)  
-                seed_entid.append(user)
-                train_t.append(time)
+                try:
+                    seed_list[time].add(user)  
+                    seed_entid.append(user)
+                    train_t.append(time)
+                except:
+                    print("time:", time)
+                    exit()
+                    
                 
         ent_embs = self.seq_GCRNN_batch(g, sub_g, latest_train_time, seed_list, history_length)
         _, index_for_ent_emb = torch.unique(torch.tensor(seed_entid) * latest_train_time + torch.tensor(train_t), 
@@ -369,7 +377,7 @@ class GCRNN(nn.Module):
             for time in time_list:
                 test_t.append(time)
         
-        latest_train_time = 2015   # train까지 포함한 snapshot 수는 2016개
+        latest_train_time = self.snapshots_num-1#2015   # train까지 포함한 snapshot 수는 2016개
         seed_entid = []
         test_t = []
         for i in range(latest_train_time+1):
@@ -391,7 +399,17 @@ class GCRNN(nn.Module):
         # candidate_n_embs: (test_click_num, (1 + 20), emb_dim); 1: target, 20: ns sample 수
         # ns_idx: (test_click_num, 21)
         candidate_user_embs = u_time_embs#[user_score_idx]   # user_score_idx: (test_click_num, )
-        candidate_user_embs = candidate_user_embs.unsqueeze(1)   # (test_click_num, 1, 128)            
+        candidate_user_embs = candidate_user_embs.unsqueeze(1)   # (test_click_num, 1, 128)
+        
+        # # GCRNN.inference 맨 아래 (곱셈 직전) ------------------------------------
+        # print("ns_idx len:", len(ns_idx),
+        #     "user_embs:", candidate_user_embs.shape,  # (?, 1, 128)
+        #     "neg_embs:", candidate_n_embs.shape)      # (?, K, 128)
+
+        # assert candidate_user_embs.size(0) == candidate_n_embs.size(0), \
+        #     f"row mismatch {candidate_user_embs.size(0)} vs {candidate_n_embs.size(0)}"
+        # # -----------------------------------------------------------------------
+            
         candidate_score = (candidate_user_embs * candidate_n_embs).sum(dim=-1)
         # candidate_n_embs: (test_click_num, emb_dim)*(test_click_num, 21, emb_dim)
         # candidate_score: (test_click_num, 21)        

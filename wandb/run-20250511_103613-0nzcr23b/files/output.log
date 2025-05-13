@@ -1,0 +1,28 @@
+
+training 1 epoch batches:   0%|                                   | 0/567 [00:00<?, ?it/s]
+Train start !
+training 1 epoch batches:   0%|                                   | 0/567 [00:14<?, ?it/s]
+Traceback (most recent call last):
+  File "model/main_for_1hop_7w.py", line 441, in <module>
+    main()
+  File "model/main_for_1hop_7w.py", line 299, in main
+    history_length
+  File "/home/user/anaconda3/envs/pio/lib/python3.6/site-packages/torch/nn/modules/module.py", line 1120, in _call_impl
+    result = forward_call(*input, **kwargs)
+  File "/home/user/pyo/Rec-with-TKG/model/GCRNN.py", line 290, in forward
+    ent_embs = self.seq_GCRNN_batch(g, sub_g, latest_train_time, seed_list, history_length)
+  File "/home/user/pyo/Rec-with-TKG/model/GCRNN.py", line 181, in seq_GCRNN_batch
+    g.ndata['node_emb'][self.user_num:] = self.News_Encoder(self.all_news_ids)
+  File "/home/user/pyo/Rec-with-TKG/model/GCRNN.py", line 93, in News_Encoder
+    nv = self.news_encoder(title_tensor, category_idx, subcategory_idx)  # shape: (1, num_filters) 가 되도록 내부 처리
+  File "/home/user/anaconda3/envs/pio/lib/python3.6/site-packages/torch/nn/modules/module.py", line 1102, in _call_impl
+    return forward_call(*input, **kwargs)
+  File "/home/user/pyo/Rec-with-TKG/utils/full_news_encoder.py", line 54, in forward
+    category_vector = self.category_embedding(torch.tensor(category_idx, device=device).long().unsqueeze(0))
+  File "/home/user/anaconda3/envs/pio/lib/python3.6/site-packages/torch/nn/modules/module.py", line 1102, in _call_impl
+    return forward_call(*input, **kwargs)
+  File "/home/user/anaconda3/envs/pio/lib/python3.6/site-packages/torch/nn/modules/sparse.py", line 160, in forward
+    self.norm_type, self.scale_grad_by_freq, self.sparse)
+  File "/home/user/anaconda3/envs/pio/lib/python3.6/site-packages/torch/nn/functional.py", line 2044, in embedding
+    return torch.embedding(weight, input, padding_idx, scale_grad_by_freq, sparse)
+RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cuda:1 and cuda:0! (when checking argument for argument index in method wrapper__index_select)

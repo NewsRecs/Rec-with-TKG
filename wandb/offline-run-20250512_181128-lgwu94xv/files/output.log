@@ -1,0 +1,12 @@
+Train start !
+# of batch: 567, # of user: 84989, batch size: 150, lr: 0.0001, embedding dim: 300, history_length: 100
+[Epoch 1] avg train_loss=2.254055
+training 1 epoch batches: 100%|███████████████████████| 1/1 [00:49<00:00, 49.62s/it]
+Traceback (most recent call last):
+  File "model/main_for_1hop_7w.py", line 441, in <module>
+    main()
+  File "model/main_for_1hop_7w.py", line 356, in main
+    history_length
+  File "/home/user/pyo/Rec-with-TKG/model/GCRNN.py", line 403, in inference
+    candidate_score = (candidate_user_embs * candidate_n_embs).sum(dim=-1)
+RuntimeError: The size of tensor a (768) must match the size of tensor b (653) at non-singleton dimension 0

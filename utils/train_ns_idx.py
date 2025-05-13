@@ -106,7 +106,7 @@ train_user_idx_batch = []
 
 news_num = len(train_df['clicked_news'])
 total_user_num = len(users)
-batch_size = 500
+batch_size = 150#500
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # batch_user_emb = []
 

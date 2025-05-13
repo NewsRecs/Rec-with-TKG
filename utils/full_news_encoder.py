@@ -43,6 +43,13 @@ class NewsEncoder(torch.nn.Module):
         """
         # Part 1: calculate category_vector
 
+        # ===== DEBUG 코드 추가 =====
+        if (category_idx >= self.config.num_categories) or (category_idx < 0):
+            raise ValueError(f"[Category] invalid index {category_idx} (num_categories={self.config.num_categories})")
+        if (subcategory_idx >= self.config.num_categories) or (subcategory_idx < 0):
+            raise ValueError(f"[SubCategory] invalid index {subcategory_idx} (num_categories={self.config.num_categories})")
+        # ==========================
+        
         # batch_size, num_filters
         category_vector = self.category_embedding(torch.tensor(category_idx, device=device).long().unsqueeze(0))
 

@@ -1,0 +1,24 @@
+{
+    "os": "Linux-6.8.0-59-generic-x86_64-with-debian-bookworm-sid",
+    "python": "3.6.10",
+    "heartbeatAt": "2025-05-13T04:25:49.738749",
+    "startedAt": "2025-05-13T04:25:48.162212",
+    "docker": null,
+    "gpu": "NVIDIA RTX A6000",
+    "gpu_count": 2,
+    "cpu_count": 36,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "model/main_for_1hop_7w.py",
+    "codePath": "model/main_for_1hop_7w.py",
+    "git": {
+        "remote": "https://github.com/NewsRecs/Rec-with-TKG.git",
+        "commit": "d597f0479632f04ed7e7ac4e1184fd4e1cbb563f"
+    },
+    "email": "yeppyteen2@naver.com",
+    "root": "/home/user/pyo/Rec-with-TKG",
+    "host": "user-System-Product-Name",
+    "username": "user",
+    "executable": "/home/user/anaconda3/envs/pio/bin/python"
+}
