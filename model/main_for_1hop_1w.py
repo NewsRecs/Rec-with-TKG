@@ -46,15 +46,15 @@ os.environ["WANDB_API_KEY"] = "632a992df3cb5a9e7c74dce28e08a8d01229018e"
 os.environ['WANDB_MODE'] = "offline"
 
 
-random_seed = 28
+random_seed = Config.seed
 random.seed(random_seed)
-np.random.seed(28); torch.manual_seed(28)
-if torch.cuda.is_available(): torch.cuda.manual_seed_all(28)
+np.random.seed(random_seed); torch.manual_seed(random_seed)
+if torch.cuda.is_available(): torch.cuda.manual_seed_all(random_seed)
 
 def main():
     # 0) device 및 batch_size 설정
-    torch.cuda.set_device(1)
-    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+    torch.cuda.set_device(Config.gpu_num)
+    device = torch.device(f"cuda:{Config.gpu_num}" if torch.cuda.is_available() else "cpu")
     original_batch_size = 150
     snapshot_weeks = 6/7   ### history + train
     snapshots_num = int(snapshot_weeks * 7 * 24 * 2)   # 2016
@@ -147,7 +147,7 @@ def main():
     )
     
     # category, subcategory -> index
-    category2int = pd.read_csv('/home/user/pyo/category2int_nyheter_splitted.tsv', sep='\t')    
+    category2int = pd.read_csv('psj/Adressa_4w/history/category2int_pio.tsv', sep='\t')    
     cat_num = Config.num_categories
     
     # category와 subcategory 매핑 딕셔너리 생성

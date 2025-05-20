@@ -23,17 +23,14 @@ import numpy as np
 
 
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-
 # behavior 데이터 로드
-file_path = './Adressa_4w/train/valid_tkg_behaviors.tsv'
+file_path = './psj/Adressa_4w/train/valid_tkg_behaviors.tsv'
 train_df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
-file_path = './Adressa_4w/train/prev_involved_train_tkg_behaviors.tsv'
+file_path = './psj/Adressa_4w/train/prev_involved_train_tkg_behaviors.tsv'
 train_prev_df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
-file_path = './Adressa_4w/test/valid_tkg_behaviors.tsv'
+file_path = './psj/Adressa_4w/test/valid_tkg_behaviors.tsv'
 test_df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
-file_path = './Adressa_4w/test/prev_involved_test_behaviors.tsv'
+file_path = './psj/Adressa_4w/test/prev_involved_test_behaviors.tsv'
 test_prev_df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
 
 train_df['click_time'] = pd.to_datetime(train_df['click_time'])
@@ -54,88 +51,73 @@ test_prev_df = test_prev_df.dropna(subset=['clicked_news'])
 
 
 
+# history behaviors 모음
+file_path = './psj/Adressa_4w/history/history_tkg_behaviors.tsv'
+history_df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
+
+# 모든 behaviors.tsv에서 유저가 클릭한 뉴스 전부 모으기
+def build_user_history_dict(dfs):
+    user_hist = {}
+    for df in dfs:
+        for user, news in zip(df['history_user'], df['clicked_news']):
+            user_hist.setdefault(user, set()).add(news)
+    return user_hist
+
+user_hist_dict = build_user_history_dict([
+    history_df, train_df, test_df
+])
+
+
+
 from tqdm import tqdm
 def generate_negative_samples_optimized(df, df_prev, negative_sample_size=4):
-    """
-    - df        : 메인(실제 negative sample 생성할) 데이터프레임
-      (columns: ['user', 'click_time', 'clicked_news', ...])
-    - df_prev   : 36시간 이전 포함된 기록 데이터프레임
-      (columns: ['user', 'click_time', 'clicked_news', ...])
-    - negative_sample_size : 각 클릭마다 추출할 negative 샘플 수
-    """
-
-    # (1) df, df_prev 모두 click_time 기준으로 정렬
-    # df_sorted = df.sort_values('click_time').reset_index(drop=True)
-    # df_prev_sorted = df_prev.sort_values('click_time').reset_index(drop=True)
-
-    # df_prev['click_time'] = pd.to_datetime(df_prev['click_time']) # , errors='coerce'
-    # 변환 실패한 행이 있으면 NaT가 생김
-    # NaT가 있으면 삭제 또는 다른 방식으로 처리
-
-    # mask_invalid = df_prev['click_time'].isna()
-    # print("Invalid click_time rows:\n", df_prev[mask_invalid])
-    
-    # print(df.head(10))
-    # print(df_sorted.head(10))
-    # print(df.equals(df_sorted))
-    # print(df_prev.equals(df_prev_sorted))
-    # exit()
-
-    
-    # (2) df_prev에서 click_time, clicked_news, user를 numpy array로 꺼내두기
-    prev_times = df_prev['click_time'].values#.astype('datetime64[ns]')
-    prev_clicks = df_prev['clicked_news'].values
-    prev_users = df_prev['history_user'].values
-    # prev_times = df_prev['click_time'].values
-    # prev_clicks = df_prev['clicked_news'].values
-    # prev_users = df_prev['history_user'].values
+    prev_times  = df_prev['click_time'   ].values
+    prev_clicks = df_prev['clicked_news' ].values
+    prev_users  = df_prev['history_user'].values
 
     results = []
+    for _, row in tqdm(df.iterrows(), total=len(df)):
+        user        = row['history_user']
+        click_time  = row['click_time']
+        clicked_news= row['clicked_news']
 
-    # (3) df_sorted를 순회하며 negative sample 생성
-    for _, row in tqdm(df.iterrows(), desc='Processing negative sampling', total=len(df)):
-        user = row['history_user']
-        click_time = row['click_time'].to_datetime64()
-        clicked_news = row['clicked_news']
-
-        # 36시간 전 시점
-        start_time = click_time - pd.Timedelta(hours=36)
-        start_time = start_time.to_datetime64()
-        # print("type:", type(prev_times[0]))
+        # 36시간 창
+        start_time  = click_time - pd.Timedelta(hours=36)
+        # numpy.searchsorted을 위해 numpy.datetime64로 변환
+        start_np = np.datetime64(start_time)
+        click_np = np.datetime64(click_time)
         
-        # (a) searchsorted로 36시간 범위를 빠르게 찾음
-        start_idx = np.searchsorted(prev_times, start_time, side='left')
-        end_idx = np.searchsorted(prev_times, click_time, side='left')
+        s_idx = np.searchsorted(prev_times, start_np, side='left')
+        e_idx = np.searchsorted(prev_times, click_np , side='left')
 
-        # (b) slice 추출 (큰 df에서 작은 구간만 떼옴)
-        slice_users = prev_users[start_idx:end_idx]
-        slice_clicks = prev_clicks[start_idx:end_idx]
+        slice_users  = prev_users [s_idx:e_idx]
+        slice_clicks = prev_clicks[s_idx:e_idx]
 
-        # (c) 36시간 구간 내 "전체 뉴스" 집합
-        #     (클릭은 전체 유저것이므로 set() 씌움)
+        # (1) 창 안 전체 뉴스
         all_news_in_window = set(slice_clicks)
 
-        # (d) 이 유저가 실제로 클릭한 뉴스 (36시간 구간 내)
-        #     np.where로 user가 같은 인덱스 추출 -> 그 인덱스로 slice_clicks 가져오기
-        user_indices = np.where(slice_users == user)[0]
+        # (2) 창 안에서 이 유저가 본 뉴스
+        user_indices   = np.where(slice_users == user)[0]
         user_clicked_news = set(slice_clicks[user_indices])
 
-        # (e) negative candidate = 전체 뉴스 - 유저가 본 뉴스
-        negative_candidates = list(all_news_in_window - user_clicked_news)
+        # (3) 전(全) 히스토리에서 이 유저가 본 뉴스
+        history_clicked = user_hist_dict.get(user, set())
 
-        # (f) negative 샘플 랜덤 추출
-        sampled_negatives = random.sample(negative_candidates, negative_sample_size)
-        
-        # (g) 결과 저장
-        negative_samples_str = " ".join(sampled_negatives)
-        results.append((user, click_time, clicked_news, negative_samples_str))
+        # (4) negative 후보 = 창 전체 − (창‑내 클릭 ∪ 전‑히스토리 클릭)
+        negative_candidates = list(
+            all_news_in_window - user_clicked_news - history_clicked
+        )
 
-    # (4) 결과 DF 생성
-    neg_df = pd.DataFrame(results, columns=['user', 'click_time', 'clicked_news', 'negative_samples'])
-    # # (5) click_time 순으로 정렬 (이미 순서대로라면 불필요할 수 있음)
-    # neg_df = neg_df.sort_values('click_time').reset_index(drop=True)
+        # (5) 후보 부족 시 중복 허용
+        sampled_negatives = (random.sample(negative_candidates, negative_sample_size)
+                             if len(negative_candidates) >= negative_sample_size
+                             else random.choices(negative_candidates, k=negative_sample_size))
 
-    return neg_df
+        results.append((user, click_time, clicked_news, " ".join(sampled_negatives)))
+
+    return pd.DataFrame(results,
+                        columns=['user','click_time','clicked_news','negative_samples'])
+
 
 
 # ---------------------------
@@ -148,7 +130,7 @@ train_neg_df = generate_negative_samples_optimized(
 )
 
 train_neg_df.to_csv(
-    "./Adressa_4w/train/tkg_train_negative_samples_lt36_ns4.tsv",
+    "./psj/Adressa_4w/train/tkg_train_negative_samples_lt36_ns4_revised.tsv",
     sep='\t',
     index=False,
     encoding='utf-8'
@@ -164,7 +146,7 @@ test_neg_df = generate_negative_samples_optimized(
 )
 
 test_neg_df.to_csv(
-    "./Adressa_4w/test/tkg_test_negative_samples_lt36_ns20.tsv",
+    "./psj/Adressa_4w/test/tkg_test_negative_samples_lt36_ns20_revised.tsv",
     sep='\t',
     index=False,
     encoding='utf-8'
@@ -172,3 +154,10 @@ test_neg_df.to_csv(
 
 
 
+def check_duplicates(tsv_path):
+    df = pd.read_csv(tsv_path, sep='\t')
+    dup_rows = df[df['negative_samples'].str.split().apply(lambda x: len(x)!=len(set(x)))]
+    print(f"{len(dup_rows)} / {len(df)} rows have duplicate negatives")
+
+check_duplicates("./psj/Adressa_4w/train/tkg_train_negative_samples_lt36_ns4_revised.tsv")
+check_duplicates("./psj/Adressa_4w/test/tkg_test_negative_samples_lt36_ns20_revised.tsv")

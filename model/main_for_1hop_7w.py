@@ -43,18 +43,18 @@ import wandb
 
 
 os.environ["WANDB_API_KEY"] = "632a992df3cb5a9e7c74dce28e08a8d01229018e"
-# os.environ['WANDB_MODE'] = "offline"
+os.environ['WANDB_MODE'] = "offline"
 
 
-random_seed = 28
+random_seed = Config.seed
 random.seed(random_seed)
-np.random.seed(28); torch.manual_seed(28)
-if torch.cuda.is_available(): torch.cuda.manual_seed_all(28)
+np.random.seed(random_seed); torch.manual_seed(random_seed)
+if torch.cuda.is_available(): torch.cuda.manual_seed_all(random_seed)
 
 def main():
     # 0) device 및 batch_size 설정
     torch.cuda.set_device(0)
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device(f"cuda:{Config.gpu_num}" if torch.cuda.is_available() else "cpu")
     original_batch_size = 150
     snapshot_weeks = 6   ### history + train
     snapshots_num = int(snapshot_weeks * 7 * 24 * 2)   # 2016
@@ -99,16 +99,6 @@ def main():
         """
         return title.split()
 
-    """
-    file_path: 사용할 데이터로 수정
-    criteria time 변경
-    
-    <df에 존재하는 뉴스들만 포함하도록 combined_news_df를 바꾸는 코드>
-    - 이게 필요한지 고민
-    -- news2int를 기존 그대로 사용했기 때문에, user를 제외한 모든 이런 정보들은 그대로 두는 것이 좋아보임
-    clicked_news_ids = df['clicked_news'].unique()
-    combined_news_df = combined_news_df[combined_news_df['clicked_news'].isin(clicked_news_ids)].reset_index(drop=True)
-    """
     file_path = '/home/user/pyo/psj/Adressa_4w/history/history_tkg_behaviors.tsv'
     df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
     # criteria_time1 = pd.Timestamp('2017-01-05 00:00:00')
@@ -122,7 +112,7 @@ def main():
     # 3개의 df를 합치기 (ignore_index=True로 인덱스 재설정) - 모든 뉴스 고려
     # 전체 뉴스 정보 로드
     combined_news_df = pd.read_csv(
-        '/home/user/pyo/psj/Adressa_4w/history/all_news_nyheter_splitted.tsv', 
+        '/home/user/pyo/psj/Adressa_4w/history/all_news.tsv',   # all_news_nyheter_splitted.tsv는 GCRNN만 적용돼야 함. 이건 NewsEncoder용!!! 
         sep='\t'
     ).rename(columns={'newsId': 'clicked_news'})
     
@@ -147,18 +137,21 @@ def main():
     )
     
     # category, subcategory -> index
-    category2int = pd.read_csv('/home/user/pyo/category2int_nyheter_splitted.tsv', sep='\t')    
+    category2int = pd.read_csv('psj/Adressa_4w/history/category2int_pio.tsv', sep='\t')
+    subcategory2int = pd.read_csv('psj/Adressa_4w/history/subcategory2int_pio.tsv', sep='\t')    
     cat_num = Config.num_categories
     
     # category와 subcategory 매핑 딕셔너리 생성
     category_map = category2int.set_index('category')['int'].to_dict()
+    subcategory_map = subcategory2int.set_index('subcategory')['int'].to_dict()
+    
     news_info['category_idx'] = news_info['category'].map(category_map).fillna(0).astype(int)
-    news_info['subcategory_idx'] = news_info['subcategory'].map(category_map).fillna(0).astype(int)
+    news_info['subcategory_idx'] = news_info['subcategory'].map(subcategory_map).fillna(0).astype(int)
 
     # 3) 범위 검증
     max_idx = int(max(news_info['category_idx'].max(),
                     news_info['subcategory_idx'].max()))
-    assert max_idx < Config.num_categories, f"Config.num_categories({Config.num_categories}) must be > max idx {max_idx}"
+    assert max_idx < Config.num_subcategories_for_NewsEncoder, f"Config.num_categories({Config.num_subcategories_for_NewsEncoder}) must be > max idx {max_idx}"
     
     
     # news_info에서 필요한 컬럼만 선택하여 news_info_df 생성

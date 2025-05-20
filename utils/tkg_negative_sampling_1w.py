@@ -23,9 +23,6 @@ import numpy as np
 
 
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-
 # behavior 데이터 로드
 file_path = './psj/Adressa_1w/train/history_tkg_behaviors.tsv'
 df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
@@ -52,7 +49,21 @@ train_prev_df = train_prev_df.dropna(subset=['clicked_news'])
 test_df = test_df.dropna(subset=['clicked_news'])
 test_prev_df = test_prev_df.dropna(subset=['clicked_news'])
 
+# 모든 behaviors.tsv에서 유저가 클릭한 뉴스 전부 모으기
+def build_user_history_dict(dfs):
+    user_hist = {}
+    for df in dfs:
+        for user, news in zip(df['history_user'], df['clicked_news']):
+            user_hist.setdefault(user, set()).add(news)
+    return user_hist
 
+criteria_time1 = pd.Timestamp('2017-01-05 00:00:00')
+criteria_time2 = pd.Timestamp('2017-01-12 00:00:00')
+df['click_time'] = pd.to_datetime(df['click_time'])
+history_df = df[(criteria_time1 <= df['click_time']) & (df['click_time'] < criteria_time2)]
+user_hist_dict = build_user_history_dict([
+    history_df
+])
 
 from tqdm import tqdm
 def generate_negative_samples_optimized(df, df_prev, negative_sample_size=4):
@@ -98,18 +109,18 @@ def generate_negative_samples_optimized(df, df_prev, negative_sample_size=4):
         click_time = row['click_time'].to_datetime64()
         clicked_news = row['clicked_news']
 
-        # 36시간 전 시점
-        start_time = click_time - pd.Timedelta(hours=36)
-        start_time = start_time.to_datetime64()
-        # print("type:", type(prev_times[0]))
+        # 36시간 창
+        start_time  = click_time - pd.Timedelta(hours=36)
+        # numpy.searchsorted을 위해 numpy.datetime64로 변환
+        start_np = np.datetime64(start_time)
+        click_np = np.datetime64(click_time)
         
-        # (a) searchsorted로 36시간 범위를 빠르게 찾음
-        start_idx = np.searchsorted(prev_times, start_time, side='left')
-        end_idx = np.searchsorted(prev_times, click_time, side='left')
+        s_idx = np.searchsorted(prev_times, start_np, side='left')
+        e_idx = np.searchsorted(prev_times, click_np , side='left')
 
         # (b) slice 추출 (큰 df에서 작은 구간만 떼옴)
-        slice_users = prev_users[start_idx:end_idx]
-        slice_clicks = prev_clicks[start_idx:end_idx]
+        slice_users  = prev_users [s_idx:e_idx]
+        slice_clicks = prev_clicks[s_idx:e_idx]
 
         # (c) 36시간 구간 내 "전체 뉴스" 집합
         #     (클릭은 전체 유저것이므로 set() 씌움)
@@ -120,8 +131,13 @@ def generate_negative_samples_optimized(df, df_prev, negative_sample_size=4):
         user_indices = np.where(slice_users == user)[0]
         user_clicked_news = set(slice_clicks[user_indices])
 
-        # (e) negative candidate = 전체 뉴스 - 유저가 본 뉴스
-        negative_candidates = list(all_news_in_window - user_clicked_news)
+        # (3) 전(全) 히스토리에서 이 유저가 본 뉴스
+        history_clicked = user_hist_dict.get(user, set())
+
+        # (4) negative 후보 = 창 전체 − (창‑내 클릭 ∪ 전‑히스토리 클릭)
+        negative_candidates = list(
+            all_news_in_window - user_clicked_news - history_clicked
+        )
 
         # (f) negative 샘플 랜덤 추출
         sampled_negatives = random.sample(negative_candidates, negative_sample_size)
@@ -148,7 +164,7 @@ train_neg_df = generate_negative_samples_optimized(
 )
 
 train_neg_df.to_csv(
-    "./psj/Adressa_1w/train/tkg_train_negative_samples_lt36_ns4.tsv",
+    "./psj/Adressa_1w/train/tkg_train_negative_samples_lt36_ns4_revised.tsv",
     sep='\t',
     index=False,
     encoding='utf-8'
@@ -164,8 +180,19 @@ test_neg_df = generate_negative_samples_optimized(
 )
 
 test_neg_df.to_csv(
-    "./psj/Adressa_1w/test/tkg_test_negative_samples_lt36_ns20.tsv",
+    "./psj/Adressa_1w/test/tkg_test_negative_samples_lt36_ns20_revised.tsv",
     sep='\t',
     index=False,
     encoding='utf-8'
 )
+
+
+def check_duplicates(tsv_path):
+    df = pd.read_csv(tsv_path, sep='\t')
+    dup_rows = df[df['negative_samples'].str.split().apply(lambda x: len(x)!=len(set(x)))]
+    print(f"{len(dup_rows)} / {len(df)} rows have duplicate negatives")
+
+check_duplicates("./psj/Adressa_1w/train/tkg_train_negative_samples_lt36_ns4.tsv")
+check_duplicates("./psj/Adressa_1w/test/tkg_test_negative_samples_lt36_ns20.tsv")
+check_duplicates("./psj/Adressa_1w/train/tkg_train_negative_samples_lt36_ns4_revised.tsv")
+check_duplicates("./psj/Adressa_1w/test/tkg_test_negative_samples_lt36_ns20_revised.tsv")

@@ -2,16 +2,19 @@ from torch import nn
 import dgl
 import torch
 from tqdm import tqdm
-# from utils import binary_search
 import numpy as np
 import gc
 import random
 from utils.nce_loss import NCELoss
-from utils.full_news_encoder import NewsEncoder
-from model.config import Config
 
-torch.cuda.set_device(0)
-random_seed = 28
+from model.config import Config
+if Config.method == 'cnn_attention':
+    from utils.full_news_encoder import NewsEncoder
+else:
+    from utils.MSA_news_encoder import NewsEncoder
+
+torch.cuda.set_device(Config.gpu_num)
+random_seed = Config.seed
 random.seed(random_seed)
 torch.manual_seed(random_seed)
 
@@ -46,7 +49,7 @@ class GCRNN(nn.Module):
     4) Loss 계산
     5) Backpropagation
     """
-    def __init__(self, all_news_ids, news_id_to_info, user_num, cat_num, news_num, pretrained_word_embedding=None, emb_dim=100, batch_size=500, snapshots_num=1680):
+    def __init__(self, all_news_ids, news_id_to_info, user_num, cat_num, news_num, pretrained_word_embedding, emb_dim=100, batch_size=150, snapshots_num=1680):
         """
         학습 대상
         1. user embeddings
@@ -60,7 +63,7 @@ class GCRNN(nn.Module):
         self.batch_size = batch_size
         self.emb_dim = emb_dim
         self.snapshots_num = snapshots_num
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device(f"cuda:{Config.gpu_num}" if torch.cuda.is_available() else "cpu")
         # self.device = torch.device("cpu")
         self.user_embedding_layer = nn.Embedding(num_embeddings=user_num, embedding_dim=emb_dim, sparse = False).to(self.device)   # GCN user 초기값
         self.cat_embedding_layer = nn.Embedding(num_embeddings=cat_num, embedding_dim=emb_dim, sparse = False).to(self.device)   # GCN relation 초기값
@@ -78,24 +81,75 @@ class GCRNN(nn.Module):
         self.all_news_ids = all_news_ids   # news_int 순서대로 id 저장됨
         self.news_id_to_info = news_id_to_info
         
+    ### LSTUR NewsEncoder        
+    # def News_Encoder(self, news_ids):
+    #     # print("Processing news embeddings \n")
+    #     # 뉴스 embeddings 생성
+    #     news_embeddings = torch.zeros((len(news_ids), self.emb_dim)).to(self.device)   # (전체 뉴스 수, 뉴스 embedding 차원)
+    #     for i, nid in enumerate(news_ids):
+    #         if nid in self.news_id_to_info:
+    #             info = self.news_id_to_info[nid]
+    #             title_idx_list = info['title_idx']
+    #             title_tensor = torch.tensor(title_idx_list, dtype=torch.long, device=self.device)
+    #             category_idx = info['category_idx']
+    #             subcategory_idx = info['subcategory_idx']
+    #             nv = self.news_encoder(title_tensor, category_idx, subcategory_idx)  # shape: (1, num_filters) 가 되도록 내부 처리
+    #             news_embeddings[i] = nv.squeeze(0)
+    #         else:
+    #             news_embeddings[i] = torch.randn(self.emb_dim, device=self.device)
         
-    def News_Encoder(self, news_ids):
-        # print("Processing news embeddings \n")
-        # 뉴스 embeddings 생성
+    #     return news_embeddings
+    
+    def News_Encoder(self, news_ids, max_batch: int = 512):
+        """
+        news_ids  : 리스트(int) - news_int 순서
+        max_batch : 한 배치에 넣을 최대 뉴스 수
+        """
         news_embeddings = torch.zeros((len(news_ids), self.emb_dim)).to(self.device)   # (전체 뉴스 수, 뉴스 embedding 차원)
+
+        batch_titles, batch_cats, batch_scats, batch_idx = [], [], [], []
+
+        def _flush():
+            if not batch_titles:
+                return
+            # ① title 텐서 패딩 — 길이가 다른 타이틀을 한 텐서로
+            padded = nn.utils.rnn.pad_sequence(
+                [torch.tensor(t, dtype=torch.long) for t in batch_titles],
+                batch_first=True, padding_value=0
+            ).to(self.device)
+
+            cats = torch.tensor(batch_cats, dtype=torch.long, device=self.device)
+            scats = torch.tensor(batch_scats, dtype=torch.long, device=self.device)
+
+            # ② MSA 뉴스 인코더 한 번에 호출
+            nv = self.news_encoder(padded, cats, scats)   # (B, emb_dim)
+            news_embeddings[batch_idx] = nv
+            if i == 0:
+                print("nv shape:", nv.shape)
+                exit()
+
+            # ③ 다음 배치를 위해 초기화
+            batch_titles.clear(); batch_cats.clear()
+            batch_scats.clear(); batch_idx.clear()
+
         for i, nid in enumerate(news_ids):
             if nid in self.news_id_to_info:
                 info = self.news_id_to_info[nid]
-                title_idx_list = info['title_idx']
-                title_tensor = torch.tensor(title_idx_list, dtype=torch.long, device=self.device)
-                category_idx = info['category_idx']
-                subcategory_idx = info['subcategory_idx']
-                nv = self.news_encoder(title_tensor, category_idx, subcategory_idx)  # shape: (1, num_filters) 가 되도록 내부 처리
-                news_embeddings[i] = nv.squeeze(0)
-            else:
+                batch_titles.append(info['title_idx'])
+                batch_cats.append(info['category_idx'])
+                batch_scats.append(info['subcategory_idx'])
+                batch_idx.append(i)
+            else:                                       # OOV 뉴스
                 news_embeddings[i] = torch.randn(self.emb_dim, device=self.device)
-        
+            # 배치가 max_batch에 도달하면 처리
+            if len(batch_titles) == max_batch:
+                _flush()
+
+        # 마지막에 남은 샘플 처리
+        _flush()
+
         return news_embeddings
+
     
     def message_func(self, edges):
         # 엣지 메시지는 뉴스 임베딩과 엣지 임베딩의 element-wise product
