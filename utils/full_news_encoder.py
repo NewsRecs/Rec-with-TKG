@@ -2,14 +2,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from utils.general.attention.additive import AdditiveAttention
-
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+import random
+import numpy as np
 
 
 class NewsEncoder(torch.nn.Module):
     def __init__(self, config, pretrained_word_embedding):
         super(NewsEncoder, self).__init__()
         self.config = config
+        self.device = torch.device(f"cuda:{config.gpu_num}" if torch.cuda.is_available() else "cpu")
         if pretrained_word_embedding is None:
             self.word_embedding = nn.Embedding(config.num_words,
                                                config.word_embedding_dim,
@@ -17,7 +18,7 @@ class NewsEncoder(torch.nn.Module):
         else:
             self.word_embedding = nn.Embedding.from_pretrained(
                 pretrained_word_embedding, freeze=False, padding_idx=0)
-        self.category_embedding = nn.Embedding(config.num_categories,
+        self.category_embedding = nn.Embedding(config.num_categories_for_NewsEncoder + config.num_subcategories_for_NewsEncoder - 1,
                                                config.num_filters,
                                                padding_idx=0)
         assert config.window_size >= 1 and config.window_size % 2 == 1
@@ -41,29 +42,42 @@ class NewsEncoder(torch.nn.Module):
         Returns:
             (shape) batch_size, num_filters * 3
         """
-        # Part 1: calculate category_vector
 
-        # ===== DEBUG 코드 추가 =====
-        if (category_idx >= self.config.num_categories) or (category_idx < 0):
-            raise ValueError(f"[Category] invalid index {category_idx} (num_categories={self.config.num_categories})")
-        if (subcategory_idx >= self.config.num_categories) or (subcategory_idx < 0):
-            raise ValueError(f"[SubCategory] invalid index {subcategory_idx} (num_categories={self.config.num_categories})")
-        # ==========================
+        # # ===== DEBUG 코드 추가 =====
+        # if (category_idx >= self.config.num_categories_for_NewsEncoder + self.config.num_subcategories_for_NewsEncoder - 1) or (category_idx < 0):
+        #     raise ValueError(f"[Category] invalid index {category_idx} (num_categories={self.config.num_categories})")
+        # if (subcategory_idx >= self.config.num_categories_for_NewsEncoder + self.config.num_subcategories_for_NewsEncoder - 1) or (subcategory_idx < 0):
+        #     raise ValueError(f"[SubCategory] invalid index {subcategory_idx} (num_categories={self.config.num_categories})")
+        # # ==========================
         
-        # batch_size, num_filters
-        category_vector = self.category_embedding(torch.tensor(category_idx, device=device).long().unsqueeze(0))
+        if self.config.use_batch:
+            # Part 1: calculate category_vector
+            # batch_size, num_filters
+            category_vector = self.category_embedding(torch.tensor(category_idx, device=self.device).long())
 
-        # Part 2: calculate subcategory_vector
+            # Part 2: calculate subcategory_vector & title_vector
+            # batch_size, num_filters
+            subcategory_vector = self.category_embedding(torch.tensor(subcategory_idx, device=self.device).long())
 
-        # batch_size, num_filters
-        subcategory_vector = self.category_embedding(torch.tensor(subcategory_idx, device=device).long().unsqueeze(0))
+            # batch_size, num_words_title, word_embedding_dim
+            title_vector = F.dropout(self.word_embedding(title_idx),
+                                    p=self.config.dropout_probability,
+                                    training=self.training)
+        else:
+            # batch_size, num_filters
+            category_vector = self.category_embedding(torch.tensor(category_idx, device=self.device).long().unsqueeze(0))
 
+            # Part 2: calculate subcategory_vector & title_vector
+            # batch_size, num_filters
+            subcategory_vector = self.category_embedding(torch.tensor(subcategory_idx, device=self.device).long().unsqueeze(0))
+
+            # batch_size, num_words_title, word_embedding_dim
+            title_vector = F.dropout(self.word_embedding(title_idx.unsqueeze(0)),
+                                    p=self.config.dropout_probability,
+                                    training=self.training)
+        
+        
         # Part 3: calculate weighted_title_vector
-
-        # batch_size, num_words_title, word_embedding_dim
-        title_vector = F.dropout(self.word_embedding(title_idx.unsqueeze(0)),
-                                 p=self.config.dropout_probability,
-                                 training=self.training)
         # batch_size, num_filters, num_words_title
         convoluted_title_vector = self.title_CNN(
             title_vector.unsqueeze(dim=1)).squeeze(dim=3)

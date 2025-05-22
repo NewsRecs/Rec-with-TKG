@@ -43,7 +43,7 @@ import wandb
 
 
 os.environ["WANDB_API_KEY"] = "632a992df3cb5a9e7c74dce28e08a8d01229018e"
-os.environ['WANDB_MODE'] = "offline"
+# os.environ['WANDB_MODE'] = "offline"
 
 
 random_seed = Config.seed
@@ -53,7 +53,7 @@ if torch.cuda.is_available(): torch.cuda.manual_seed_all(random_seed)
 
 def main():
     # 0) device 및 batch_size 설정
-    torch.cuda.set_device(0)
+    torch.cuda.set_device(Config.gpu_num)
     device = torch.device(f"cuda:{Config.gpu_num}" if torch.cuda.is_available() else "cpu")
     original_batch_size = 150
     snapshot_weeks = 6   ### history + train
@@ -75,7 +75,7 @@ def main():
     ### history + train snapshots
     g, splitted_g = split_train_graph(
         snapshot_weeks, 
-        '/home/user/pyo/psj/Adressa_4w/history/total_graph_full_reciprocal.bin'
+        'psj/Adressa_4w/history/total_graph_full_reciprocal.bin'
     )
     # print(g.number_of_nodes())
     # exit()
@@ -86,9 +86,9 @@ def main():
 
 
     # 사전 학습된 단어 로드
-    word2int = pd.read_csv(os.path.join('/home/user/pyo/psj/Adressa_4w/history/', 'word2int.tsv'), sep='\t')
+    word2int = pd.read_csv(os.path.join('psj/Adressa_4w/history/', 'word2int.tsv'), sep='\t')
     word_to_idx = word2int.set_index('word')['int'].to_dict()
-    embedding_file_path = os.path.join('/home/user/pyo/psj/Adressa_4w/history/', 'pretrained_word_embedding.npy')
+    embedding_file_path = os.path.join('psj/Adressa_4w/history/', 'pretrained_word_embedding.npy')
     embeddings = np.load(embedding_file_path)
     pretrained_word_embedding = torch.tensor(embeddings, dtype=torch.float, device=device)   # (330900, 100)
     
@@ -99,7 +99,7 @@ def main():
         """
         return title.split()
 
-    file_path = '/home/user/pyo/psj/Adressa_4w/history/history_tkg_behaviors.tsv'
+    file_path = 'psj/Adressa_4w/history/history_tkg_behaviors.tsv'
     df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
     # criteria_time1 = pd.Timestamp('2017-01-05 00:00:00')
     # criteria_time2 = pd.Timestamp('2017-01-12 00:00:00')
@@ -112,13 +112,13 @@ def main():
     # 3개의 df를 합치기 (ignore_index=True로 인덱스 재설정) - 모든 뉴스 고려
     # 전체 뉴스 정보 로드
     combined_news_df = pd.read_csv(
-        '/home/user/pyo/psj/Adressa_4w/history/all_news.tsv',   # all_news_nyheter_splitted.tsv는 GCRNN만 적용돼야 함. 이건 NewsEncoder용!!! 
+        'psj/Adressa_4w/history/all_news.tsv',   # all_news_nyheter_splitted.tsv는 GCRNN만 적용돼야 함. 이건 NewsEncoder용!!! 
         sep='\t'
     ).rename(columns={'newsId': 'clicked_news'})
     
-    all_news_ids = pd.read_csv('/home/user/pyo/psj/Adressa_4w/history/news2int.tsv', sep='\t')['news_id']
+    all_news_ids = pd.read_csv('psj/Adressa_4w/history/news2int.tsv', sep='\t')['news_id']
     news_num = len(all_news_ids)
-    user2int_df = pd.read_csv(os.path.join('/home/user/pyo/psj/Adressa_4w/history/', 'user2int.tsv'), sep='\t')
+    user2int_df = pd.read_csv(os.path.join('psj/Adressa_4w/history/', 'user2int.tsv'), sep='\t')
     user_num = len(user2int_df['user_int'])
     all_users = [i for i in range(user_num)]
     
@@ -138,20 +138,19 @@ def main():
     
     # category, subcategory -> index
     category2int = pd.read_csv('psj/Adressa_4w/history/category2int_pio.tsv', sep='\t')
-    subcategory2int = pd.read_csv('psj/Adressa_4w/history/subcategory2int_pio.tsv', sep='\t')    
-    cat_num = Config.num_categories
+    # subcategory2int = pd.read_csv('psj/Adressa_4w/history/subcategory2int_pio.tsv', sep='\t')    
     
     # category와 subcategory 매핑 딕셔너리 생성
     category_map = category2int.set_index('category')['int'].to_dict()
-    subcategory_map = subcategory2int.set_index('subcategory')['int'].to_dict()
+    # subcategory_map = subcategory2int.set_index('subcategory')['int'].to_dict()
     
     news_info['category_idx'] = news_info['category'].map(category_map).fillna(0).astype(int)
-    news_info['subcategory_idx'] = news_info['subcategory'].map(subcategory_map).fillna(0).astype(int)
+    news_info['subcategory_idx'] = news_info['subcategory'].map(category_map).fillna(0).astype(int)
 
-    # 3) 범위 검증
-    max_idx = int(max(news_info['category_idx'].max(),
-                    news_info['subcategory_idx'].max()))
-    assert max_idx < Config.num_subcategories_for_NewsEncoder, f"Config.num_categories({Config.num_subcategories_for_NewsEncoder}) must be > max idx {max_idx}"
+    # # 3) 범위 검증
+    # max_idx = int(max(news_info['category_idx'].max(),
+    #                 news_info['subcategory_idx'].max()))
+    # assert max_idx < Config.num_subcategories_for_NewsEncoder, f"Config.num_categories({Config.num_subcategories_for_NewsEncoder}) must be > max idx {max_idx}"
     
     
     # news_info에서 필요한 컬럼만 선택하여 news_info_df 생성
@@ -172,7 +171,7 @@ def main():
 
 
     ### Loading idx_infos for calculating NLL loss
-    train_ns_idx_batch = ns_indexing('/home/user/pyo/psj/Adressa_4w/train/train_ns.tsv', original_batch_size, user_num=user_num)
+    train_ns_idx_batch = ns_indexing('psj/Adressa_4w/train/train_ns.tsv', original_batch_size, user_num=user_num)
     # train_user_idx_batch = torch.load('./psj/Adressa_4w/train/train_user_idx_batch.pt')   # 사실 얘는 필요 없음...
 
     
@@ -184,14 +183,15 @@ def main():
     """
     test_datas, _ = make_test_datas(snapshots_num)
     test_news, test_time, test_empty_check = zip(*test_datas)
-    test_ns_idx_batch = ns_indexing('/home/user/pyo/psj/Adressa_4w/test/validation_ns.tsv', original_batch_size, user_num=user_num)   # 7w data는 validation_ns.tsv가 맞음!!!
+    test_ns_idx_batch = ns_indexing('psj/Adressa_4w/test/validation_ns.tsv', original_batch_size, user_num=user_num)   # 7w data는 validation_ns.tsv가 맞음!!!
     
     # with open('./psj/Adressa_4w/test/test_datas.pkl', 'rb') as f:
     #     datas = pickle.load(f)
     # test_news, test_time, test_empty_check = zip(*test_datas)
     # test_ns_idx_batch = ns_indexing('./psj/Adressa_4w/test/test_ns.tsv', original_batch_size)
     
-    
+    cat_num = Config.num_categories   # GCRNN 용
+
     print("data loading finished!")
     # 필요한 정보 로드 끝 -------------------------------------------------------------------------------------------------
     
@@ -248,7 +248,7 @@ def main():
         emb_dim=emb_dim,      # emb_dim 등 모델 설정에 맞춰 전달
         patience=3,           # 개선 없으면 3epoch 후 스탑(예시)
         min_delta=1e-4,
-        ckpt_dir=f'/home/user/pyo/Adressa_7w/test/1_hop_no_val_ckpt/bs_{original_batch_size}_lr_{learning_rate}_seed_{random_seed}', 
+        ckpt_dir=f'Adressa_7w/test/1_hop_no_val_ckpt/bs_{original_batch_size}_lr_{learning_rate}_seed_{random_seed}', 
         verbose=True,
         save_all=False        # True로 설정하면 매 epoch마다 체크포인트 저장
     )

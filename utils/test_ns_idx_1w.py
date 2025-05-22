@@ -89,6 +89,18 @@ train_df['news_int'] = train_df['clicked_news'].map(news2int_mapping)
 # validation_ns_df = train_ns[train_ns['click_time'] <= criteria_time]
 # test_5d_ns_df = train_ns[train_ns['click_time'] > criteria_time]
 
+### publish_time 정보 추가
+# ① publish_time 정보 로드
+pub_path = "./psj/Adressa_4w/all_news_publish_time_int.tsv"
+pub_df   = pd.read_csv(pub_path, sep='\t', usecols=['news_int', 'publish_time'])
+
+# ② train_ns ↔ pub_df를 news_int로 조인
+train_ns = train_ns.merge(pub_df, on='news_int', how='left')
+
+# # nan 체크 - 15383개 모두 있음 ㅋ
+# print(len(train_ns[train_ns['publish_time'].isna()]))
+# exit()
+
 
 train_ns.to_csv('./psj/Adressa_1w/test/test_ns.tsv', sep='\t', index=False)
 # # validation/train_ns_df 저장

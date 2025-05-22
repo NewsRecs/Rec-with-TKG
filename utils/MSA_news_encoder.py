@@ -31,12 +31,12 @@ class NewsEncoder(nn.Module):
             # # self.mapping_tensor를 register_buffer로 등록 (모델의 device 이동을 관리)
             # self.register_buffer('mapping_tensor', mapping)
 
-        self.category_embedding = nn.Embedding(cfg.num_categories_for_NewsEncoder,
+        self.category_embedding = nn.Embedding(cfg.num_categories_for_NewsEncoder + cfg.num_subcategories_for_NewsEncoder - 1,
                                                cfg.word_embedding_dim,
                                                padding_idx=0)
-        self.subcategory_embedding = nn.Embedding(cfg.num_subcategories_for_NewsEncoder,
-                                               cfg.word_embedding_dim,
-                                               padding_idx=0)
+        # self.subcategory_embedding = nn.Embedding(cfg.num_subcategories_for_NewsEncoder,
+        #                                        cfg.word_embedding_dim,
+        #                                        padding_idx=0)
         
         attention_input_dim = cfg.num_filters * cfg.window_size + cfg.category_emb_dim + cfg.subcategory_emb_dim   # 300 + 100 + 100
 
@@ -142,7 +142,7 @@ class NewsEncoder(nn.Module):
 
         # 카테고리 및 서브카테고리 인덱스를 임베딩 벡터로 변환합니다.
         category_vector = self.category_embedding(category_idx)      # shape: [B, cat_dim]
-        subcategory_vector = self.subcategory_embedding(subcategory_idx)  # shape: [B, subcat_dim]
+        subcategory_vector = self.category_embedding(subcategory_idx)  # shape: [B, subcat_dim]
 
         # 제목, 카테고리, 서브카테고리 벡터를 연결하여 하나의 벡터로 결합합니다.
         fuse_word_emb = torch.cat([title_vector, category_vector, subcategory_vector], dim=1)  # [B, title_dim+cat_dim+subcat_dim]

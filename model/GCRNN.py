@@ -100,7 +100,7 @@ class GCRNN(nn.Module):
         
     #     return news_embeddings
     
-    def News_Encoder(self, news_ids, max_batch: int = 512):
+    def News_Encoder(self, news_ids, max_batch: int = 1024):
         """
         news_ids  : 리스트(int) - news_int 순서
         max_batch : 한 배치에 넣을 최대 뉴스 수
@@ -124,9 +124,6 @@ class GCRNN(nn.Module):
             # ② MSA 뉴스 인코더 한 번에 호출
             nv = self.news_encoder(padded, cats, scats)   # (B, emb_dim)
             news_embeddings[batch_idx] = nv
-            if i == 0:
-                print("nv shape:", nv.shape)
-                exit()
 
             # ③ 다음 배치를 위해 초기화
             batch_titles.clear(); batch_cats.clear()
@@ -144,6 +141,9 @@ class GCRNN(nn.Module):
             # 배치가 max_batch에 도달하면 처리
             if len(batch_titles) == max_batch:
                 _flush()
+                # print("nv shape:", news_embeddings[0].shape)
+                # print("nv:", news_embeddings[0])
+                # exit()
 
         # 마지막에 남은 샘플 처리
         _flush()
