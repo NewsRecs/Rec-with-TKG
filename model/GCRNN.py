@@ -9,9 +9,15 @@ from utils.nce_loss import NCELoss
 
 from model.config import Config
 if Config.method == 'cnn_attention':
-    from utils.full_news_encoder import NewsEncoder
+    if Config.no_category:
+        from utils.title_news_encoder import NewsEncoder
+    else:
+        from utils.full_news_encoder import NewsEncoder
 else:
-    from utils.MSA_news_encoder import NewsEncoder
+    if Config.no_category:
+        from utils.title_MSA_news_encoder import NewsEncoder
+    else:    
+        from utils.MSA_news_encoder import NewsEncoder
 
 torch.cuda.set_device(Config.gpu_num)
 random_seed = Config.seed

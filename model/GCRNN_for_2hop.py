@@ -7,11 +7,21 @@ import numpy as np
 import gc
 import random
 from utils.nce_loss import NCELoss
-from utils.full_news_encoder import NewsEncoder
-from model.config import Config
 
-torch.cuda.set_device(0)
-random_seed = 28
+from model.config import Config
+if Config.method == 'cnn_attention':
+    if Config.no_category:
+        from utils.title_news_encoder import NewsEncoder
+    else:
+        from utils.full_news_encoder import NewsEncoder
+else:
+    if Config.no_category:
+        from utils.title_MSA_news_encoder import NewsEncoder
+    else:    
+        from utils.MSA_news_encoder import NewsEncoder
+
+torch.cuda.set_device(Config.gpu_num)
+random_seed = Config.seed
 random.seed(random_seed)
 torch.manual_seed(random_seed)
 
@@ -60,7 +70,7 @@ class GCRNN(nn.Module):
         self.batch_size = batch_size
         self.emb_dim = emb_dim
         self.snapshots_num = snapshots_num
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device(f"cuda:{Config.gpu_num}" if torch.cuda.is_available() else "cpu")
         # self.device = torch.device("cpu")
         self.user_embedding_layer = nn.Embedding(num_embeddings=user_num, embedding_dim=emb_dim, sparse = False).to(self.device)   # GCN user 초기값
         self.cat_embedding_layer = nn.Embedding(num_embeddings=cat_num, embedding_dim=emb_dim, sparse = False).to(self.device)   # GCN relation 초기값
