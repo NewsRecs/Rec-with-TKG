@@ -11,7 +11,7 @@ model의 forward input이지만, 안 쓰임
 -> category2int 바꾸든 안 바꾸든 현재는 의미 없음
 """
 
-def make_train_datas(week = 7):
+def make_train_datas(interval_minutes, week = 7):
 
     # snapshots에 카테고리 정보 추가하기
     # 1. history, train, test에 대해 전역 category2int를 만든다 (이미 있음)
@@ -81,13 +81,14 @@ def make_train_datas(week = 7):
         return base_start + datetime.timedelta(minutes=interval_minutes * periods)
 
     train_df['click_time'] = pd.to_datetime(train_df['click_time'])
-    train_df['Period_Start'] = train_df['click_time'].apply(lambda x: get_period_start(x, interval_minutes=30))
+    train_df['Period_Start'] = train_df['click_time'].apply(lambda x: get_period_start(x, interval_minutes=interval_minutes))
     
     ### 매우 중요!!!
     history_weeks = 5
-    snapshots_num = int(history_weeks * 7 * 24 * 2)
+    interval_hours = interval_minutes / 60
+    his_snapshots_num = int(history_weeks * 7 * 24 / interval_hours)
     unique_period_starts = train_df['Period_Start'].unique()
-    time_dict = {ps: i+snapshots_num for i, ps in enumerate(sorted(unique_period_starts))}
+    time_dict = {ps: i+his_snapshots_num for i, ps in enumerate(sorted(unique_period_starts))}
     train_df['time_idx'] = train_df['Period_Start'].map(time_dict)
 
     """

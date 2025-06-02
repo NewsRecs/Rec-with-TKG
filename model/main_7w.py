@@ -1,21 +1,3 @@
-# model_name.py
-
-
-
-"""
-2/27 17시 17분
-check, batch size 로직 두 개랑 print들만 바꿈
-
-해야 할 일 (2/28 1시 2분)
-1. validation, test 가능하도록 main, GCRNN 코드 작성 - 완
-2. chatgpt 성주dgl의 맨 위 쓰레드 참고해서 test에서만 metrics 계산하도록 코드 작성 - 완
-2*** test(5일)와 validation(2일)의 유저 및 뉴스 수가 바뀌어서 문제가 생길 수 있음 - 검토 필요! (완)
-3. validation set 및 test set 만드는 코드 작성 - 완
-3-1) make_test_datas.py에서 validation set도 만들기 - 완
-3-2) ns_idx.py를 함수화해서 main에서 import하여 사용할 수 있도록 하기 (input: batch_size) - 완
-
-"""
-
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -29,15 +11,20 @@ import numpy as np
 import time
 import random
 # import matplotlib.pyplot as plt
+from model.config import Config
+if Config.hop == 1:
+    from model.GCRNN import GCRNN
+elif Config.hop == 2:
+    from model.GCRNN_for_2hop import GCRNN
+else:
+    from model.GCRNN_for_3hop import GCRNN    
 from utils.make_train_datas import make_train_datas
 from utils.make_test_datas import make_test_datas
 from utils.time_split_batch import split_train_graph
-from model.GCRNN import GCRNN
 from utils.ns_indexing import ns_indexing
 from utils.EarlyStopping import EarlyStopping
 from utils.evaluate import ndcg_score, mrr_score
 from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score
-from model.config import Config
 import dgl
 import wandb
 
@@ -56,12 +43,13 @@ def main():
     torch.cuda.set_device(Config.gpu_num)
     device = torch.device(f"cuda:{Config.gpu_num}" if torch.cuda.is_available() else "cpu")
     original_batch_size = 150
+    ### window size에 따른 snapshots 수 계산
+    interval_minutes = Config.interval_minutes
+    interval_hours = interval_minutes / 60
     snapshot_weeks = 6   ### history + train
-    snapshots_num = int(snapshot_weeks * 7 * 24 * 2)   # 2016
+    snapshots_num = int(snapshot_weeks * 7 * 24 / interval_hours)   # 2016
     print("snapshots_num:", snapshots_num)
-    # device = torch.device("cpu")
-
-
+    
     print('Available devices ', torch.cuda.device_count())
     print('Current cuda device ', torch.cuda.current_device())
     print(torch.cuda.get_device_name(device))
@@ -75,13 +63,13 @@ def main():
     ### history + train snapshots
     g, splitted_g = split_train_graph(
         snapshot_weeks, 
-        'psj/Adressa_4w/datas/total_graph_full_reciprocal.bin'
+        f'psj/Adressa_4w/datas/total_graph_full_reciprocal_{interval_minutes}m.bin'
     )
     # print(g.number_of_nodes())
     # exit()
     # with open('./psj/Adressa_4w/train/train_datas.pkl', 'rb') as f:
     #     datas = pickle.load(f)
-    datas = make_train_datas()
+    datas = make_train_datas(interval_minutes=interval_minutes)
     train_news, train_category, train_time = zip(*datas)
 
 
@@ -221,7 +209,7 @@ def main():
         "history_length": history_length,
         "snapshot_weeks": snapshot_weeks,
         "snapshots_num": snapshots_num,
-    }, name=f"{int(snapshot_weeks) + 1}w Adressa_method_{Config.method}_score adjust_{Config.adjust_score}_batch size {original_batch_size}_seed {random_seed}")
+    }, name=f"{int(snapshot_weeks) + 1}w Adressa_hop_{Config.hop}_batch size {original_batch_size}_seed {random_seed}")
     
     # 3) 모델 초기화
     model = GCRNN(
@@ -262,10 +250,12 @@ def main():
     )
 
     # 4) Batch 학습을 통해 train 수행
-    print("Train start !")
     print(f"# of batch: {batch_num}, # of user: {user_num}, "
           f"batch size: {batch_size}, lr: {learning_rate}, "
-          f"embedding dim: {emb_dim}, history_length: {history_length}\n")
+          f"embedding dim: {emb_dim}, history_length: {history_length}",
+          f"window size: {round(Config.interval_minutes/60, 2)}h",
+          f"snapshots_num: {snapshots_num}",
+          f"# of hops: {Config.hop}\n")
     
     for epoch in range(1, num_epochs+1):
         model.train()
