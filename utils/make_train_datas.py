@@ -6,10 +6,12 @@ import datetime
 import os
 
 """
-full_news_encoder.py를 사용하기 위해 category2int_pio.tsv로 변경
+train_news, train_category는 어차피 안 쓰임
+model의 forward input이지만, 안 쓰임
+-> category2int 바꾸든 안 바꾸든 현재는 의미 없음
 """
 
-def make_train_datas():
+def make_train_datas(week = 7):
 
     # snapshots에 카테고리 정보 추가하기
     # 1. history, train, test에 대해 전역 category2int를 만든다 (이미 있음)
@@ -19,15 +21,19 @@ def make_train_datas():
 
 
     # news2int 가져오기
-    news2int_file_path = '/home/user/pyo/psj/Adressa_4w/history/news2int.tsv'
+    news2int_file_path = f'psj/Adressa_4w/history/news2int.tsv'
     news2int = pd.read_csv(news2int_file_path, sep='\t')
 
     # a) train dataset(0205 08:00:02 ~ 0212 08:00:01)인 valid_tkg_behaviors.tsv 로드
-    train_file_path = '/home/user/pyo/psj/Adressa_4w/train/valid_tkg_behaviors.tsv'
+    train_file_path = f'psj/Adressa_4w/train/valid_tkg_behaviors.tsv'
     train_df = pd.read_csv(train_file_path, sep='\t', encoding='utf-8')
-    # 'clicked_news' 열에서 '-1' 제거
-    train_df['clicked_news'] = train_df['clicked_news'].str.replace(r'-\d+$', '', regex=True)
-
+    # click_time을 string에서 datetime으로 변환
+    train_df['click_time'] = pd.to_datetime(train_df['click_time'])
+    
+    # criteria_time1 = pd.Timestamp('2017-01-20 00:00:00')
+    # criteria_time2 = pd.Timestamp('2017-01-23 00:00:00')
+    # train_df = df[(criteria_time1 <= df['click_time']) & (df['click_time'] < criteria_time2)]
+    
     # train_df에서 nan이 존재하는 행 제거
     train_df = train_df.dropna(subset=['clicked_news'])
 
@@ -36,21 +42,16 @@ def make_train_datas():
     ########################################### 여기부터 negative sampling을 위해 추가된 부분
     # news2int를 dictionary로 변환
     news2int_mapping = dict(zip(news2int['news_id'], news2int['news_int']))
+    
     # user2int mapping
-    file_path = '/home/user/pyo/psj/Adressa_4w/history/history_tkg_behaviors.tsv'
-    history_df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
-    history_df['click_time'] = pd.to_datetime(history_df['click_time'])
-    end_time = pd.Timestamp('2017-02-05 08:00:01')
-    history_df = history_df[history_df['click_time'] <= end_time]   # 정확히 5주 데이터만 사용하도록 필터링
-    users = history_df['history_user'].unique()
-    user2int_df = pd.read_csv(os.path.join('/home/user/pyo/psj/Adressa_4w/history/', 'user2int.tsv'), sep='\t')
+    user2int_df = pd.read_csv(os.path.join(f'psj/Adressa_4w/history/', 'user2int.tsv'), sep='\t')
     user2int = user2int_df.set_index('user_id')['user_int'].to_dict()
-    all_user_ids = [i for i in range(len(users))]   # 0 ~ 84988
+    all_user_ids = user2int_df['user_int'].tolist()   # 0 ~ 84988
 
     # train_ns['negative_samples'] = train_ns['negative_samples'].apply(map_negative_samples)
     train_df['user_int'] = train_df['history_user'].map(user2int)
     train_df['news_int'] = train_df['clicked_news'].map(news2int_mapping)
-    category2int = pd.read_csv('/home/user/pyo/category2int_nyheter_splitted.tsv', sep='\t')
+    category2int = pd.read_csv('category2int_nyheter_splitted.tsv', sep='\t')
     # 필요시 category2int에 'No category' 추가
     if 'No category' not in category2int['category'].values:
         new_row = pd.DataFrame([{'category': 'No category', 'int': 0}])
@@ -81,9 +82,12 @@ def make_train_datas():
 
     train_df['click_time'] = pd.to_datetime(train_df['click_time'])
     train_df['Period_Start'] = train_df['click_time'].apply(lambda x: get_period_start(x, interval_minutes=30))
-        
+    
+    ### 매우 중요!!!
+    history_weeks = 5
+    snapshots_num = int(history_weeks * 7 * 24 * 2)
     unique_period_starts = train_df['Period_Start'].unique()
-    time_dict = {ps: i+1680 for i, ps in enumerate(sorted(unique_period_starts))}
+    time_dict = {ps: i+snapshots_num for i, ps in enumerate(sorted(unique_period_starts))}
     train_df['time_idx'] = train_df['Period_Start'].map(time_dict)
 
     """

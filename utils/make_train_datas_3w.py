@@ -6,10 +6,12 @@ import datetime
 import os
 
 """
-full_news_encoder.py를 사용하기 위해 category2int_pio.tsv로 변경
+train_news, train_category는 어차피 안 쓰임
+model의 forward input이지만, 안 쓰임
+-> category2int 바꾸든 안 바꾸든 현재는 의미 없음
 """
 
-def make_train_datas():
+def make_train_datas(week = 3):
 
     # snapshots에 카테고리 정보 추가하기
     # 1. history, train, test에 대해 전역 category2int를 만든다 (이미 있음)
@@ -19,17 +21,17 @@ def make_train_datas():
 
 
     # news2int 가져오기
-    news2int_file_path = 'psj/Adressa_4w/history/news2int.tsv'
+    news2int_file_path = f'psj/Adressa_{week}w/datas/news2int.tsv'
     news2int = pd.read_csv(news2int_file_path, sep='\t')
 
     # a) train dataset(0205 08:00:02 ~ 0212 08:00:01)인 valid_tkg_behaviors.tsv 로드
-    train_file_path = 'psj/Adressa_1w/train/history_tkg_behaviors.tsv'
+    train_file_path = f'psj/Adressa_{week}w/datas/3w_behaviors.tsv'
     df = pd.read_csv(train_file_path, sep='\t', encoding='utf-8')
     # click_time을 string에서 datetime으로 변환
     df['click_time'] = pd.to_datetime(df['click_time'])
     
-    criteria_time1 = pd.Timestamp('2017-01-10 00:00:00')
-    criteria_time2 = pd.Timestamp('2017-01-11 00:00:00')
+    criteria_time1 = pd.Timestamp('2017-01-20 00:00:00')
+    criteria_time2 = pd.Timestamp('2017-01-23 00:00:00')
     train_df = df[(criteria_time1 <= df['click_time']) & (df['click_time'] < criteria_time2)]
     
     # train_df에서 nan이 존재하는 행 제거
@@ -42,7 +44,7 @@ def make_train_datas():
     news2int_mapping = dict(zip(news2int['news_id'], news2int['news_int']))
     
     # user2int mapping
-    user2int_df = pd.read_csv(os.path.join('psj/Adressa_1w/datas/', 'user2int.tsv'), sep='\t')
+    user2int_df = pd.read_csv(os.path.join(f'psj/Adressa_{week}w/datas/', 'user2int.tsv'), sep='\t')
     user2int = user2int_df.set_index('user_id')['user_int'].to_dict()
     all_user_ids = user2int_df['user_int'].tolist()   # 0 ~ 84988
 
@@ -68,7 +70,7 @@ def make_train_datas():
     
 
     # period_start -> time_idx 매핑(0부터 시작)
-    def get_period_start(click_time, interval_minutes=1440, start_time=datetime.time(8, 0, 2)):
+    def get_period_start(click_time, interval_minutes=1440, start_time=datetime.time(0, 0, 0)):
 
         base_start = datetime.datetime.combine(click_time.date(), start_time)
         if click_time < base_start:
@@ -80,9 +82,12 @@ def make_train_datas():
 
     train_df['click_time'] = pd.to_datetime(train_df['click_time'])
     train_df['Period_Start'] = train_df['click_time'].apply(lambda x: get_period_start(x, interval_minutes=30))
-        
+    
+    ### 매우 중요!!!
+    history_weeks = 15 / 7
+    snapshots_num = int(history_weeks * 7 * 24 * 2)
     unique_period_starts = train_df['Period_Start'].unique()
-    time_dict = {ps: i+240 for i, ps in enumerate(sorted(unique_period_starts))}
+    time_dict = {ps: i+snapshots_num for i, ps in enumerate(sorted(unique_period_starts))}
     train_df['time_idx'] = train_df['Period_Start'].map(time_dict)
 
     """

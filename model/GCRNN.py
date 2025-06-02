@@ -100,7 +100,7 @@ class GCRNN(nn.Module):
         
     #     return news_embeddings
     
-    def News_Encoder(self, news_ids, max_batch: int = 1024):
+    def News_Encoder(self, news_ids, max_batch: int = 512):
         """
         news_ids  : 리스트(int) - news_int 순서
         max_batch : 한 배치에 넣을 최대 뉴스 수
@@ -110,6 +110,10 @@ class GCRNN(nn.Module):
         batch_titles, batch_cats, batch_scats, batch_idx = [], [], [], []
 
         def _flush():
+            # _flush() 시작 부분
+            assert all(0 <= idx < len(news_ids) for idx in batch_idx), \
+                f"batch_idx 범위 초과! max={max(batch_idx)}, news_ids len={len(news_ids)}"
+
             if not batch_titles:
                 return
             # ① title 텐서 패딩 — 길이가 다른 타이틀을 한 텐서로
@@ -117,13 +121,26 @@ class GCRNN(nn.Module):
                 [torch.tensor(t, dtype=torch.long) for t in batch_titles],
                 batch_first=True, padding_value=0
             ).to(self.device)
+            # print("DEBUG batch_cats:", batch_cats)
+            # print("DEBUG batch_scats:", batch_scats)
+            # print("DEBUG padded.shape, cats len, scats len:", padded.shape, len(batch_cats), len(batch_scats))
 
             cats = torch.tensor(batch_cats, dtype=torch.long, device=self.device)
             scats = torch.tensor(batch_scats, dtype=torch.long, device=self.device)
 
+            ### MSA 기준 debug 코드
+            # assert torch.max(padded) < self.news_encoder.word_encoder.num_embeddings, \
+            #                             f"Word index OOB: {torch.max(padded)} >= {self.news_encoder.word_encoder.num_embeddings}"
+            # assert torch.max(cats) < self.news_encoder.category_embedding.num_embeddings, \
+            #                             f"Cat index OOB: {torch.max(cats)} >= {self.news_encoder.category_embedding.num_embeddings}"
+            # assert torch.max(scats) < self.news_encoder.category_embedding.num_embeddings, \
+            #                             f"SubCat index OOB: {torch.max(scats)} >= {self.news_encoder.category_embedding.num_embeddings}"
+                        
             # ② MSA 뉴스 인코더 한 번에 호출
             nv = self.news_encoder(padded, cats, scats)   # (B, emb_dim)
             news_embeddings[batch_idx] = nv
+            # print(f"DEBUG: news_embeddings.shape = {news_embeddings.shape}, nv.shape = {nv.shape}")
+            # print(f"DEBUG: batch_idx min/max = {min(batch_idx)}/{max(batch_idx)}")
 
             # ③ 다음 배치를 위해 초기화
             batch_titles.clear(); batch_cats.clear()
@@ -140,6 +157,7 @@ class GCRNN(nn.Module):
                 news_embeddings[i] = torch.randn(self.emb_dim, device=self.device)
             # 배치가 max_batch에 도달하면 처리
             if len(batch_titles) == max_batch:
+
                 _flush()
                 # print("nv shape:", news_embeddings[0].shape)
                 # print("nv:", news_embeddings[0])

@@ -18,7 +18,7 @@ class NewsEncoder(torch.nn.Module):
         else:
             self.word_embedding = nn.Embedding.from_pretrained(
                 pretrained_word_embedding, freeze=False, padding_idx=0)
-        self.category_embedding = nn.Embedding(config.num_categories_for_NewsEncoder + config.num_subcategories_for_NewsEncoder - 1,
+        self.category_embedding = nn.Embedding(config.num_categories_for_NewsEncoder + config.num_subcategories_for_NewsEncoder - 1,   
                                                config.num_filters,
                                                padding_idx=0)
         assert config.window_size >= 1 and config.window_size % 2 == 1
@@ -57,6 +57,11 @@ class NewsEncoder(torch.nn.Module):
 
             # Part 2: calculate subcategory_vector & title_vector
             # batch_size, num_filters
+            # subcategory 임베딩 직전에
+            num_scats = self.category_embedding.num_embeddings
+            assert all(0 <= sc < num_scats for sc in subcategory_idx), \
+                f"subcategory_idx 범위 초과! max_sc={max(subcategory_idx)}, num_embeddings={num_scats}"
+
             subcategory_vector = self.category_embedding(torch.tensor(subcategory_idx, device=self.device).long())
 
             # batch_size, num_words_title, word_embedding_dim

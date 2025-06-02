@@ -7,29 +7,17 @@ import os
 # -----------------------------
 # 0. 파일 위치 설정
 # -----------------------------
-BEH_PATH    = ['psj/Adressa_4w/history/history_tkg_behaviors.tsv', 
-                       'psj/Adressa_4w/train/valid_tkg_behaviors.tsv', 'psj/Adressa_4w/test/valid_tkg_behaviors.tsv']
-PUB_PATH    = 'psj/Adressa_4w/datas/news_publish_times.tsv'
-SAVE_DIR1   = 'psj/Adressa_4w/train'          # 결과 저장 폴더
-SAVE_DIR2   = 'psj/Adressa_4w/test'
-
-test_ns_path = os.path.join(SAVE_DIR2, 'tkg_test_negative_samples_lt36_ns20.tsv')
-test_ns = pd.read_csv(test_ns_path, sep='\t')
-test_ns['click_time']   = pd.to_datetime(test_ns['click_time'])
-test_time = pd.Timestamp('2017-02-19 08:00:01')
-test_df  = test_ns[test_ns['click_time'] <= test_time]
-test_df.to_csv(os.path.join(SAVE_DIR2, 'tkg_test_negative_samples_lt36_ns20.tsv'), sep='\t', index=False)
-exit()
-
+BEH_PATH   = 'psj/Adressa_3w/datas/3w_behaviors.tsv'
+PUB_PATH   = 'psj/Adressa_3w/datas/news_publish_times.tsv'
+SAVE_DIR1   = 'psj/Adressa_3w/datas/train'          # 결과 저장 폴더
+SAVE_DIR2   = 'psj/Adressa_3w/datas/test'          
 os.makedirs(SAVE_DIR1, exist_ok=True)
 os.makedirs(SAVE_DIR2, exist_ok=True)
 
 # -----------------------------
 # 1. 데이터 불러오기
 # -----------------------------
-df1, df2, df3 = (pd.read_csv(path, sep='\t', dtype=str) for path in BEH_PATH)
-df = pd.concat([df1, df2, df3])
-# df = pd.read_csv(BEH_PATH, sep='\t', encoding='utf-8')
+df = pd.read_csv(BEH_PATH, sep='\t', encoding='utf-8')
 df['click_time']   = pd.to_datetime(df['click_time'])
 df['clicked_news'] = df['clicked_news'].str.replace(r'-\d+$', '', regex=True)
 
@@ -50,15 +38,11 @@ user2clicked = (
 # -----------------------------
 # 3. 학습·테스트 구간 분할
 # -----------------------------
+train_mask = (df['click_time'] >= '2017-01-20') & (df['click_time'] < '2017-01-23')
+test_mask  = (df['click_time'] >= '2017-01-23') & (df['click_time'] < '2017-01-26')
 
-train_df = df2.copy()
-test_df  = df3.copy()
-train_df['click_time'] = pd.to_datetime(train_df['click_time'])
-test_df['click_time']  = pd.to_datetime(test_df['click_time'])
-test_time = pd.Timestamp('2017-02-19 08:00:02')
-test_df  = test_df[test_df['click_time'] < test_time]
-
-
+train_df = df.loc[train_mask].copy()
+test_df  = df.loc[test_mask].copy()
 
 # -----------------------------
 # 4. 36 시간 이내 뉴스 후보 사전 구축
