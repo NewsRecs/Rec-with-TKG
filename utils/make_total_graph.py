@@ -135,4 +135,4 @@ for interval_minute in interval_minutes:
     
     print(df['time_idx'].max())
     print(g.number_of_nodes())
-    print("Total graph g saved!")
+    print(f"Total graph g({g_save_path}) saved!")

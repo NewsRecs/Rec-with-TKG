@@ -25,7 +25,9 @@ def make_train_datas(interval_minutes, week = 7):
     news2int = pd.read_csv(news2int_file_path, sep='\t')
 
     # a) train dataset(0205 08:00:02 ~ 0212 08:00:01)인 valid_tkg_behaviors.tsv 로드
+    hist_path = 'psj/Adressa_4w/history/history_tkg_behaviors.tsv'    
     train_file_path = f'psj/Adressa_4w/train/valid_tkg_behaviors.tsv'
+    hist_df  = pd.read_csv(hist_path,  sep='\t', encoding='utf-8')
     train_df = pd.read_csv(train_file_path, sep='\t', encoding='utf-8')
     # click_time을 string에서 datetime으로 변환
     train_df['click_time'] = pd.to_datetime(train_df['click_time'])
@@ -37,8 +39,35 @@ def make_train_datas(interval_minutes, week = 7):
     # train_df에서 nan이 존재하는 행 제거
     train_df = train_df.dropna(subset=['clicked_news'])
 
+    df_all = pd.concat([hist_df, train_df], ignore_index=True)
+    df_all['click_time'] = pd.to_datetime(df_all['click_time'])
 
+    ### 수정된 부분
+    # ---------- 1. 전역 anchor ----------
+    first_click  = df_all['click_time'].min()
+    anchor_date  = first_click.normalize()            # 자정으로 내림
+    anchor       = anchor_date + datetime.timedelta(hours=8, seconds=2)  # 08:00:02
 
+    # ---------- 2. 전역 period_idx / Period_Start ----------
+    def to_period_idx(ts):
+        delta = ts - anchor
+        return int(delta.total_seconds() // (interval_minutes * 60))
+
+    df_all['period_idx']   = df_all['click_time'].apply(to_period_idx)
+    df_all['Period_Start'] = df_all['period_idx'].apply(
+        lambda i: anchor + datetime.timedelta(minutes=interval_minutes * i)
+    )
+
+    # ---------- 3. history / train 다시 분리 ----------
+    ### 매우 중요!!!
+    history_weeks = 5
+    hist_df  = df_all.loc[df_all['period_idx'] <  history_weeks * 7 * 24 / (interval_minutes / 60)]
+    train_df = df_all.loc[df_all['period_idx'] >= history_weeks * 7 * 24 / (interval_minutes / 60)]
+
+    # 이제 train_df['time_idx'] = train_df['period_idx'] 그대로 사용
+    train_df.rename(columns={'period_idx': 'time_idx'}, inplace=True)
+    
+    
     ########################################### 여기부터 negative sampling을 위해 추가된 부분
     # news2int를 dictionary로 변환
     news2int_mapping = dict(zip(news2int['news_id'], news2int['news_int']))
@@ -69,27 +98,25 @@ def make_train_datas(interval_minutes, week = 7):
     train_df['cat_int'] = train_df.apply(get_cat_int, axis=1)
     
 
-    # period_start -> time_idx 매핑(0부터 시작)
-    def get_period_start(click_time, interval_minutes=1440, start_time=datetime.time(8, 0, 2)):
+    # # period_start -> time_idx 매핑(0부터 시작)
+    # def get_period_start(click_time, interval_minutes=1440, start_time=datetime.time(8, 0, 2)):
 
-        base_start = datetime.datetime.combine(click_time.date(), start_time)
-        if click_time < base_start:
-            base_start -= datetime.timedelta(days=1)
-        delta = click_time - base_start
-        periods = int(delta.total_seconds() // (interval_minutes * 60))
+    #     base_start = datetime.datetime.combine(click_time.date(), start_time)
+    #     if click_time < base_start:
+    #         base_start -= datetime.timedelta(days=1)
+    #     delta = click_time - base_start
+    #     periods = int(delta.total_seconds() // (interval_minutes * 60))
 
-        return base_start + datetime.timedelta(minutes=interval_minutes * periods)
+    #     return base_start + datetime.timedelta(minutes=interval_minutes * periods)
 
-    train_df['click_time'] = pd.to_datetime(train_df['click_time'])
-    train_df['Period_Start'] = train_df['click_time'].apply(lambda x: get_period_start(x, interval_minutes=interval_minutes))
+    # train_df['click_time'] = pd.to_datetime(train_df['click_time'])
+    # train_df['Period_Start'] = train_df['click_time'].apply(lambda x: get_period_start(x, interval_minutes=interval_minutes))
     
-    ### 매우 중요!!!
-    history_weeks = 5
-    interval_hours = interval_minutes / 60
-    his_snapshots_num = int(history_weeks * 7 * 24 / interval_hours)
-    unique_period_starts = train_df['Period_Start'].unique()
-    time_dict = {ps: i+his_snapshots_num for i, ps in enumerate(sorted(unique_period_starts))}
-    train_df['time_idx'] = train_df['Period_Start'].map(time_dict)
+    # interval_hours = interval_minutes / 60
+    # his_snapshots_num = int(history_weeks * 7 * 24 / interval_hours)
+    # unique_period_starts = train_df['Period_Start'].unique()
+    # time_dict = {ps: i+his_snapshots_num for i, ps in enumerate(sorted(unique_period_starts))}
+    # train_df['time_idx'] = train_df['Period_Start'].map(time_dict)
 
     """
     train_news: 각 요소(리스트)는 train data에서 각 유저가 클릭한 news_ids

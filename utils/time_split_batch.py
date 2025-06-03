@@ -6,7 +6,7 @@ from dgl.data.utils import load_graphs
 import numpy as np
 
 
-def split_train_graph(history_week, graph_path):
+def split_train_graph(history_week, interval_hours, graph_path):
     """
     1) df['Period_Start'] 기준으로 30분 단위 구간을 순회
     2) 각 구간 내에서 user_int를 500명씩 잘라서 edge_subgraph
@@ -22,8 +22,10 @@ def split_train_graph(history_week, graph_path):
     
         
     splitted = []
+    float_snapshot_num = history_week * 7 * 24 / interval_hours
+    snapshots_num = int(float_snapshot_num)# + 1 if type(float_snapshot_num) == float else int(float_snapshot_num)
     # seed_list = []
-    for i in range(int(history_week*7*24*2)):
+    for i in range(snapshots_num):
         # 해당 batch_user_ids가 클릭한 df 행만 추출
         # time_window_users = seeds[i]
         # batch_src = group[batch_mask]['news_int'].values

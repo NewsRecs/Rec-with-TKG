@@ -11,15 +11,15 @@ import numpy as np
 import time
 import random
 # import matplotlib.pyplot as plt
-from model.config import Config
+from model.config_3w import Config
 if Config.hop == 1:
     from model.GCRNN import GCRNN
 elif Config.hop == 2:
     from model.GCRNN_for_2hop import GCRNN
 else:
     from model.GCRNN_for_3hop import GCRNN    
-from utils.make_train_datas import make_train_datas
-from utils.make_test_datas import make_test_datas
+from utils.make_train_datas_3w import make_train_datas
+from utils.make_test_datas_3w import make_test_datas
 from utils.time_split_batch import split_train_graph
 from utils.ns_indexing import ns_indexing
 from utils.EarlyStopping import EarlyStopping
@@ -47,8 +47,7 @@ def main():
     interval_minutes = Config.interval_minutes
     interval_hours = interval_minutes / 60
     snapshot_weeks = 6   ### history + train
-    float_snapshot_num = snapshot_weeks * 7 * 24 / interval_hours
-    snapshots_num = int(float_snapshot_num)# + 1 if type(float_snapshot_num) == float else int(float_snapshot_num)   # 2016
+    snapshots_num = int(snapshot_weeks * 7 * 24 / interval_hours)   # 2016
     print("snapshots_num:", snapshots_num)
     
     print('Available devices ', torch.cuda.device_count())

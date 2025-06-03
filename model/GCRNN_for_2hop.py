@@ -8,7 +8,7 @@ import gc
 import random
 from utils.nce_loss import NCELoss
 
-from model.config import Config
+from model.config_1w import Config
 if Config.method == 'cnn_attention':
     if Config.no_category:
         from utils.title_news_encoder import NewsEncoder
@@ -89,22 +89,82 @@ class GCRNN(nn.Module):
         self.news_id_to_info = news_id_to_info
         
         
-    def News_Encoder(self, news_ids):
-        # print("Processing news embeddings \n")
-        # 뉴스 embeddings 생성
+    # def News_Encoder(self, news_ids):
+    #     # print("Processing news embeddings \n")
+    #     # 뉴스 embeddings 생성
+    #     news_embeddings = torch.zeros((len(news_ids), self.emb_dim)).to(self.device)   # (전체 뉴스 수, 뉴스 embedding 차원)
+    #     for i, nid in enumerate(news_ids):
+    #         if nid in self.news_id_to_info:
+    #             info = self.news_id_to_info[nid]
+    #             title_idx_list = info['title_idx']
+    #             title_tensor = torch.tensor(title_idx_list, dtype=torch.long, device=self.device)
+    #             category_idx = info['category_idx']
+    #             subcategory_idx = info['subcategory_idx']
+    #             nv = self.news_encoder(title_tensor, category_idx, subcategory_idx)  # shape: (1, num_filters) 가 되도록 내부 처리
+    #             news_embeddings[i] = nv.squeeze(0)
+    #         else:
+    #             news_embeddings[i] = torch.randn(self.emb_dim, device=self.device)
+        
+    #     return news_embeddings
+
+    def News_Encoder(self, news_ids, max_batch: int = 512):
+        """
+        news_ids  : 리스트(int) - news_int 순서
+        max_batch : 한 배치에 넣을 최대 뉴스 수
+        """
         news_embeddings = torch.zeros((len(news_ids), self.emb_dim)).to(self.device)   # (전체 뉴스 수, 뉴스 embedding 차원)
+
+        batch_titles, batch_cats, batch_scats, batch_idx = [], [], [], []
+
+        def _flush():
+            # _flush() 시작 부분
+            assert all(0 <= idx < len(news_ids) for idx in batch_idx), \
+                f"batch_idx 범위 초과! max={max(batch_idx)}, news_ids len={len(news_ids)}"
+
+            if not batch_titles:
+                return
+            # ① title 텐서 패딩 — 길이가 다른 타이틀을 한 텐서로
+            padded = nn.utils.rnn.pad_sequence(
+                [torch.tensor(t, dtype=torch.long) for t in batch_titles],
+                batch_first=True, padding_value=0
+            ).to(self.device)
+            # print("DEBUG batch_cats:", batch_cats)
+            # print("DEBUG batch_scats:", batch_scats)
+            # print("DEBUG padded.shape, cats len, scats len:", padded.shape, len(batch_cats), len(batch_scats))
+
+            cats = torch.tensor(batch_cats, dtype=torch.long, device=self.device)
+            scats = torch.tensor(batch_scats, dtype=torch.long, device=self.device)
+
+            # ② MSA 뉴스 인코더 한 번에 호출
+            nv = self.news_encoder(padded, cats, scats)   # (B, emb_dim)
+            news_embeddings[batch_idx] = nv
+            # print(f"DEBUG: news_embeddings.shape = {news_embeddings.shape}, nv.shape = {nv.shape}")
+            # print(f"DEBUG: batch_idx min/max = {min(batch_idx)}/{max(batch_idx)}")
+
+            # ③ 다음 배치를 위해 초기화
+            batch_titles.clear(); batch_cats.clear()
+            batch_scats.clear(); batch_idx.clear()
+
         for i, nid in enumerate(news_ids):
             if nid in self.news_id_to_info:
                 info = self.news_id_to_info[nid]
-                title_idx_list = info['title_idx']
-                title_tensor = torch.tensor(title_idx_list, dtype=torch.long, device=self.device)
-                category_idx = info['category_idx']
-                subcategory_idx = info['subcategory_idx']
-                nv = self.news_encoder(title_tensor, category_idx, subcategory_idx)  # shape: (1, num_filters) 가 되도록 내부 처리
-                news_embeddings[i] = nv.squeeze(0)
-            else:
+                batch_titles.append(info['title_idx'])
+                batch_cats.append(info['category_idx'])
+                batch_scats.append(info['subcategory_idx'])
+                batch_idx.append(i)
+            else:                                       # OOV 뉴스
                 news_embeddings[i] = torch.randn(self.emb_dim, device=self.device)
-        
+            # 배치가 max_batch에 도달하면 처리
+            if len(batch_titles) == max_batch:
+
+                _flush()
+                # print("nv shape:", news_embeddings[0].shape)
+                # print("nv:", news_embeddings[0])
+                # exit()
+
+        # 마지막에 남은 샘플 처리
+        _flush()
+
         return news_embeddings
     
     def message_func(self, edges):
@@ -239,24 +299,40 @@ class GCRNN(nn.Module):
                 user_prev_hn = g.ndata['node_emb'][user_seed_]#.to(self.device1)
                 user_prev_cn = g.ndata['cx'][user_seed_]#.to(self.device1)
 
-                edge_num = len(gcn_seed_2nd_layer_edge_per_time[inverse][0])
-                g.send_and_recv(edges = gcn_seed_2nd_layer_edge_per_time[inverse])
-                if edge_num > 0:
-                    try:
-                        g.ndata['node_emb'] = g.ndata['node_emb2'] + g.ndata['node_emb']
-                        g.ndata.pop('node_emb2')
-                    except:
-                        pass
+                # edge_num = len(gcn_seed_2nd_layer_edge_per_time[inverse][0])
+                # g.send_and_recv(edges = gcn_seed_2nd_layer_edge_per_time[inverse])
+                # if edge_num > 0:
+                #     try:
+                #         g.ndata['node_emb'] = g.ndata['node_emb2'] + g.ndata['node_emb']
+                #         g.ndata.pop('node_emb2')
+                #     except:
+                #         pass
                     
-                edge_num = len(gcn_seed_1hopedge_per_time[inverse][0])
-                g.send_and_recv(edges = gcn_seed_1hopedge_per_time[inverse])
-                if edge_num > 0:
-                    try:
-                        g.ndata['node_emb'] = g.ndata['node_emb2'] + g.ndata['node_emb']
-                        g.ndata.pop('node_emb2')
-                    except:
-                        pass
+                # edge_num = len(gcn_seed_1hopedge_per_time[inverse][0])
+                # g.send_and_recv(edges = gcn_seed_1hopedge_per_time[inverse])
+                # if edge_num > 0:
+                #     try:
+                #         g.ndata['node_emb'] = g.ndata['node_emb2'] + g.ndata['node_emb']
+                #         g.ndata.pop('node_emb2')
+                #     except:
+                #         pass
                 
+                orig = g.ndata['node_emb']                 # 원본 백업 (clone 권장)
+                agg  = torch.zeros_like(orig)              # hop 결과 누적 버퍼
+
+                # 2-hop
+                g.send_and_recv(edges=gcn_seed_2nd_layer_edge_per_time[inverse])
+                if len(gcn_seed_2nd_layer_edge_per_time[inverse][0]) > 0:
+                    agg += g.ndata.pop('node_emb2')
+
+                # 1-hop
+                g.send_and_recv(edges=gcn_seed_1hopedge_per_time[inverse])
+                if len(gcn_seed_1hopedge_per_time[inverse][0]) > 0:
+                    agg += g.ndata.pop('node_emb2')
+
+                # 최종 업데이트 : Residual 한 번 + (선택) 평균 정규화
+                g.ndata['node_emb'] = orig + agg / 2.0
+
                 user_input = g.ndata['node_emb'][user_seed_]
 
                 user_hn, user_cn = self.user_RNN(user_input, (user_prev_hn, user_prev_cn))   # RNN이 실행되는 time gap이 유저임베딩마다 다름
@@ -419,7 +495,7 @@ class GCRNN(nn.Module):
             for time in time_list:
                 test_t.append(time)
         
-        latest_train_time = 2015   # train까지 포함한 snapshot 수는 2016개
+        latest_train_time = self.snapshots_num - 1   # train까지 포함한 snapshot 수는 2016개 (7w 30m 기준)
         seed_entid = []
         test_t = []
         for i in range(latest_train_time+1):
