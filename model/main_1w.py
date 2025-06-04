@@ -270,11 +270,12 @@ def main():
     )
 
     # 4) Batch 학습을 통해 train 수행
-    print("Train start !")
     print(f"# of batch: {batch_num}, # of user: {user_num}, "
           f"batch size: {batch_size}, lr: {learning_rate}, "
           f"embedding dim: {emb_dim}, history_length: {history_length}",
-          f"window size: {round(Config.interval_minutes/60, 2)}h\n")
+          f"window size: {round(Config.interval_minutes/60, 2)}h",
+          f"snapshots_num: {snapshots_num}",
+          f"# of hops: {Config.hop}\n")
     
     for epoch in range(1, num_epochs+1):
         model.train()

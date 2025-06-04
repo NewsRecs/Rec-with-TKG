@@ -4,15 +4,12 @@ import torch
 from tqdm import tqdm
 import os
 
-
+"""
+마찬가지로 category2int 무쓸모
+"""
 def make_test_datas(snapshots_num: int):
-
-    # news2int 가져오기
-    news2int_file_path = '/home/user/pyo/psj/Adressa_4w/history/news2int.tsv'
-    news2int = pd.read_csv(news2int_file_path, sep='\t')
-
     # a) test dataset(0212 08:00:02 ~ 0219 08:00:01)인 valid_tkg_behaviors.tsv 로드
-    test_file_path = '/home/user/pyo/psj/Adressa_1w/train/history_tkg_behaviors.tsv'
+    test_file_path = 'psj/Adressa_1w/datas/1w_behaviors.tsv'
     df = pd.read_csv(test_file_path, sep='\t', encoding='utf-8')
     # click_time을 string에서 datetime으로 변환
     df['click_time'] = pd.to_datetime(df['click_time'])
@@ -24,35 +21,36 @@ def make_test_datas(snapshots_num: int):
     # test_df에서 nan이 존재하는 행 제거
     test_df = test_df.dropna(subset=['clicked_news'])
 
-
-
     ########################################### 여기부터 negative sampling
+    # news2int 가져오기
+    news2int_file_path = 'psj/Adressa_1w/datas/news2int.tsv'
+    news2int = pd.read_csv(news2int_file_path, sep='\t')
     # news2int를 dictionary로 변환
     news2int_mapping = dict(zip(news2int['news_id'], news2int['news_int']))
     
     # user2int mapping
-    user2int_df = pd.read_csv(os.path.join('/home/user/pyo/psj/Adressa_1w/datas/', 'user2int.tsv'), sep='\t')
+    user2int_df = pd.read_csv(os.path.join('psj/Adressa_1w/datas/', 'user2int.tsv'), sep='\t')
     user2int = user2int_df.set_index('user_id')['user_int'].to_dict()
     all_user_ids = user2int_df['user_int'].tolist()   # 0 ~ 84988
 
     test_df['user_int'] = test_df['history_user'].map(user2int)
     test_df['news_int'] = test_df['clicked_news'].map(news2int_mapping)
-    category2int = pd.read_csv('/home/user/pyo/category2int_nyheter_splitted.tsv', sep='\t')
-    # 필요시 category2int에 'No category' 추가
-    if 'No category' not in category2int['category'].values:
-        new_row = pd.DataFrame([{'category': 'No category', 'int': 0}])
-        category2int = pd.concat([new_row, category2int], ignore_index=True)
-    cat2int = category2int.set_index('category')['int'].to_dict()
+    # category2int = pd.read_csv('psj/Adressa_3w/datas/category2int_nyheter_splitted.tsv', sep='\t')
+    # # 필요시 category2int에 'No category' 추가
+    # if 'No category' not in category2int['category'].values:
+    #     new_row = pd.DataFrame([{'category': 'No category', 'int': 0}])
+    #     category2int = pd.concat([new_row, category2int], ignore_index=True)
+    # cat2int = category2int.set_index('category')['int'].to_dict()
     
-    ############# category가 nyheter이면 subcategory로 매핑, 그렇지 않으면 category로 매핑
-    def get_cat_int(row):
-        if row['category'] == 'nyheter':
-            # subcategory를 dict에서 찾되, 없다면 'No category'(또는 0)로 처리
-            return cat2int.get(row['subcategory'], cat2int['No category'])
-        else:
-            return cat2int.get(row['category'], cat2int['No category'])
+    # ############# category가 nyheter이면 subcategory로 매핑, 그렇지 않으면 category로 매핑
+    # def get_cat_int(row):
+    #     if row['category'] == 'nyheter':
+    #         # subcategory를 dict에서 찾되, 없다면 'No category'(또는 0)로 처리
+    #         return cat2int.get(row['subcategory'], cat2int['No category'])
+    #     else:
+    #         return cat2int.get(row['category'], cat2int['No category'])
 
-    test_df['cat_int'] = test_df.apply(get_cat_int, axis=1)
+    # test_df['cat_int'] = test_df.apply(get_cat_int, axis=1)
 
 
 

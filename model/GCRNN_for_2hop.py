@@ -8,7 +8,7 @@ import gc
 import random
 from utils.nce_loss import NCELoss
 
-from model.config_1w import Config
+from model.config import Config
 if Config.method == 'cnn_attention':
     if Config.no_category:
         from utils.title_news_encoder import NewsEncoder
@@ -317,21 +317,21 @@ class GCRNN(nn.Module):
                 #     except:
                 #         pass
                 
-                orig = g.ndata['node_emb']                 # 원본 백업 (clone 권장)
-                agg  = torch.zeros_like(orig)              # hop 결과 누적 버퍼
+                original_node_embs = g.ndata['node_emb']                 # 원본 백업 (clone 권장)
+                aggregators = torch.zeros_like(original_node_embs)              # hop 결과 누적 버퍼
 
                 # 2-hop
                 g.send_and_recv(edges=gcn_seed_2nd_layer_edge_per_time[inverse])
                 if len(gcn_seed_2nd_layer_edge_per_time[inverse][0]) > 0:
-                    agg += g.ndata.pop('node_emb2')
+                    aggregators += g.ndata.pop('node_emb2')
 
                 # 1-hop
                 g.send_and_recv(edges=gcn_seed_1hopedge_per_time[inverse])
                 if len(gcn_seed_1hopedge_per_time[inverse][0]) > 0:
-                    agg += g.ndata.pop('node_emb2')
+                    aggregators += g.ndata.pop('node_emb2')
 
                 # 최종 업데이트 : Residual 한 번 + (선택) 평균 정규화
-                g.ndata['node_emb'] = orig + agg / 2.0
+                g.ndata['node_emb'] = original_node_embs + aggregators / 2
 
                 user_input = g.ndata['node_emb'][user_seed_]
 
