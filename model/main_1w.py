@@ -33,7 +33,7 @@ from model.config_1w import Config
 if Config.hop == 1:
     from model.GCRNN import GCRNN
 elif Config.hop == 2:
-    from model.GCRNN_for_2hop import GCRNN
+    from model.GCRNN_for_2hop_ver2 import GCRNN
 else:
     from model.GCRNN_for_3hop import GCRNN    
 from utils.make_train_datas_1w import make_train_datas
@@ -277,6 +277,7 @@ def main():
           f"snapshots_num: {snapshots_num}",
           f"# of hops: {Config.hop}\n")
     
+    torch.autograd.set_detect_anomaly(True)
     for epoch in range(1, num_epochs+1):
         model.train()
         epoch_loss_sum = 0.0
@@ -309,7 +310,38 @@ def main():
                 train_ns_idx_batch[b],
                 history_length
             )
-            loss.backward()   # calculate gradient          
+            loss.backward()   # calculate gradient    
+            
+            # # --- gradient 확인 코드 시작 ---
+            # if b <= 5:
+            #     total_norm = 0.0
+            #     for name, param in model.named_parameters():
+            #         if 'user_embedding_layer.weight' in name:
+            #             param.register_hook(lambda g, n=name: print(f"{n} grad norm =", g.norm()))        
+                
+                #     if param.grad is not None:
+                #         # L2 노름 계산
+                #         grad_norm = param.grad.data.norm(2).item()
+                #         total_norm += grad_norm ** 2
+                #         print(f"[Grad] {name:40s} | norm: {grad_norm:.6f}")
+                # total_norm = total_norm ** 0.5
+                # print(f"[Grad] 전체 gradient L2 norm: {total_norm:.6f}")
+                # # wandb에 로깅
+                # wandb.log({"grad_norm": total_norm}, step=epoch)
+                # print(f"user embedding layer: {model.user_embedding_layer.weight[:10]}")
+                # print(f"c0_embedding_layer_u: {model.c0_embedding_layer_u.weight[:10]}")
+                # print(f"user_cn: {model.user_cn[:10]}")
+                # print(f"user_hn: {model.user_hn[:10]}")
+                # print(f"user_cn: {model.user_cn[:10]}")
+                
+                # print()
+                # # user embedding, c0 embedding 파라미터 grad 확인
+                # ue_grad = model.user_embedding_layer.weight.grad   # (user_num, emb_dim)
+                # c0_grad = model.c0_embedding_layer_u.weight.grad   # (user_num+news_num, emb_dim)
+                # print("user_embedding_layer grad norm:", ue_grad.norm().item())
+                # print("c0_embedding_layer_u grad norm:", c0_grad.norm().item())
+            # --- gradient 확인 코드 끝 ---
+                  
             optimizer.step()   # update parameter via calculated gradient
             optimizer.zero_grad()   # initialize gradient
             

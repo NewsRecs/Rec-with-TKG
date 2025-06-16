@@ -11,7 +11,7 @@ model의 forward input이지만, 안 쓰임
 -> category2int 바꾸든 안 바꾸든 현재는 의미 없음
 """
 
-def make_train_datas(week = 3):
+def make_train_datas(interval_minutes, week = 3):
 
     # snapshots에 카테고리 정보 추가하기
     # 1. history, train, test에 대해 전역 category2int를 만든다 (이미 있음)
@@ -25,12 +25,12 @@ def make_train_datas(week = 3):
     news2int = pd.read_csv(news2int_file_path, sep='\t')
 
     # a) train dataset(0205 08:00:02 ~ 0212 08:00:01)인 valid_tkg_behaviors.tsv 로드
-    train_file_path = f'psj/Adressa_{week}w/datas/3w_behaviors.tsv'
+    train_file_path = f'psj/Adressa_{week}w/datas/{week}w_behaviors.tsv'
     df = pd.read_csv(train_file_path, sep='\t', encoding='utf-8')
     # click_time을 string에서 datetime으로 변환
     df['click_time'] = pd.to_datetime(df['click_time'])
     
-    criteria_time1 = pd.Timestamp('2017-01-20 00:00:00')
+    criteria_time1 = pd.Timestamp('2017-01-05 00:00:00')
     criteria_time2 = pd.Timestamp('2017-01-23 00:00:00')
     train_df = df[(criteria_time1 <= df['click_time']) & (df['click_time'] < criteria_time2)]
     
@@ -51,7 +51,7 @@ def make_train_datas(week = 3):
     # train_ns['negative_samples'] = train_ns['negative_samples'].apply(map_negative_samples)
     train_df['user_int'] = train_df['history_user'].map(user2int)
     train_df['news_int'] = train_df['clicked_news'].map(news2int_mapping)
-    category2int = pd.read_csv('category2int_nyheter_splitted.tsv', sep='\t')
+    category2int = pd.read_csv(f'psj/Adressa_{week}w/datas/category2int_nyheter_splitted.tsv', sep='\t')
     # 필요시 category2int에 'No category' 추가
     if 'No category' not in category2int['category'].values:
         new_row = pd.DataFrame([{'category': 'No category', 'int': 0}])
@@ -68,27 +68,39 @@ def make_train_datas(week = 3):
 
     train_df['cat_int'] = train_df.apply(get_cat_int, axis=1)
     
+    ### interval_minutes가 <= 24h인 경우에는 ok
+    # # period_start -> time_idx 매핑(0부터 시작)
+    # def get_period_start(click_time, interval_minutes, start_time=datetime.time(0, 0, 0)):
 
-    # period_start -> time_idx 매핑(0부터 시작)
-    def get_period_start(click_time, interval_minutes=1440, start_time=datetime.time(0, 0, 0)):
+    #     base_start = datetime.datetime.combine(click_time.date(), start_time)
+    #     if click_time < base_start:
+    #         base_start -= datetime.timedelta(days=1)
+    #     delta = click_time - base_start
+    #     periods = int(delta.total_seconds() // (interval_minutes * 60))
 
-        base_start = datetime.datetime.combine(click_time.date(), start_time)
-        if click_time < base_start:
-            base_start -= datetime.timedelta(days=1)
-        delta = click_time - base_start
+    #     return base_start + datetime.timedelta(minutes=interval_minutes * periods)
+    
+    GLOBAL_START = pd.Timestamp('2017-01-05 00:00:00')  # criteria_time1와 동일
+    def get_period_start_global(click_time, interval_minutes):
+        """36시간(2160분) 단위 전역 버킷 시작 시각 반환"""
+        delta = click_time - GLOBAL_START
         periods = int(delta.total_seconds() // (interval_minutes * 60))
+        return GLOBAL_START + pd.Timedelta(minutes=interval_minutes * periods)
 
-        return base_start + datetime.timedelta(minutes=interval_minutes * periods)
 
     train_df['click_time'] = pd.to_datetime(train_df['click_time'])
-    train_df['Period_Start'] = train_df['click_time'].apply(lambda x: get_period_start(x, interval_minutes=30))
+    train_df['Period_Start'] = train_df['click_time'].apply(lambda x: get_period_start_global(x, interval_minutes=interval_minutes))
     
     ### 매우 중요!!!
-    history_weeks = 15 / 7
-    snapshots_num = int(history_weeks * 7 * 24 * 2)
+    history_weeks = 15/7#15 / 7
+    interval_hours = interval_minutes / 60
+    his_snapshots_num = int(history_weeks * 7 * 24 / interval_hours)
+    
     unique_period_starts = train_df['Period_Start'].unique()
-    time_dict = {ps: i+snapshots_num for i, ps in enumerate(sorted(unique_period_starts))}
+    time_dict = {ps: i for i, ps in enumerate(sorted(unique_period_starts))}
     train_df['time_idx'] = train_df['Period_Start'].map(time_dict)
+    train_df = train_df[train_df['time_idx'] >= his_snapshots_num]
+    print(train_df['time_idx'].max())
 
     """
     train_news: 각 요소(리스트)는 train data에서 각 유저가 클릭한 news_ids

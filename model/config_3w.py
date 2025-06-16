@@ -1,11 +1,14 @@
-# NewsEncoder 설정
+import os
+
 class Config:
     gpu_num = 0
-    seed = 28
+    if 'SEED' in os.environ:
+        seed = int(os.environ['SEED'])
     use_batch = True
-    hop = 1
+    batch_size = 150
+    hop = 3
     interval_minutes = 30 # 30, 720, 1440, 2160
-    
+
     num_words = 1 + 330899   # 실제 단어 수(330899)에 패딩 토큰(index=0)을 더함; index = 0: 존재하지 않는 단어들
     word_embedding_dim = 100   # 사전 학습된 단어 embedding 차원
     num_categories = 34#35   # nyheter category를 nyheter의 subcategory로 대체하고 No category case까지 포함한 수
@@ -20,7 +23,7 @@ class Config:
     
     ### for MSA NewsEncoder
     method = 'multihead_self_attention' # 'cnn_attention'
-
+    
     head_num = 20
     head_dim = 15
     dataset_lang = 'norwegian'

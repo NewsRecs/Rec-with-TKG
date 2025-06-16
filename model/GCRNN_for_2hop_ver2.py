@@ -9,7 +9,7 @@ import random
 from utils.nce_loss import NCELoss
 from typing import Optional, List
 
-from model.config import Config
+from model.config_3w import Config
 if Config.method == 'cnn_attention':
     if Config.no_category:
         from utils.title_news_encoder import NewsEncoder
@@ -237,12 +237,12 @@ class GCRNN(nn.Module):
         h_accum = self.alpha[0] * g.ndata['h']          # α₀·h⁽⁰⁾
         for k in range(self.K):
             g.send_and_recv(edges=edges)
-            h_accum = h_accum + self.alpha[k+1] * g.ndata['h']  # += αₖ₊₁·h⁽ᵏ⁺¹⁾
-
+            # h_accum = h_accum + self.alpha[k+1] * g.ndata['h']  # += αₖ₊₁·h⁽ᵏ⁺¹⁾
+            h_accum = h_accum.add(self.alpha[k+1] * g.ndata['h'])
+            
         g.ndata['node_emb'] = h_accum
         # 메모리 해제
-        with torch.no_grad():
-            del g.ndata['deg'], g.ndata['h'];  torch.cuda.empty_cache()
+        del g.ndata['deg'], g.ndata['h'];  torch.cuda.empty_cache()
         return h_accum[seed_nodes]
 
 
@@ -361,13 +361,14 @@ class GCRNN(nn.Module):
                 pass
         
         self.rel_embedding = self.cat_embedding_layer(torch.tensor(range(self.cat_num)).to(self.device))
-        # # 초기화해줘야 밑에서 슬라이싱 가능
-        # g.ndata['node_emb'] = torch.zeros(g.number_of_nodes(), self.emb_dim, device=self.device)
-        user_embeddings = self.user_embedding_layer(torch.tensor(range(self.user_num)).to(self.device))
-        news_embeddings = self.News_Encoder(self.all_news_ids)
-        g.ndata['node_emb'] = torch.cat([user_embeddings, news_embeddings], dim=0)
+        # 초기화해줘야 밑에서 슬라이싱 가능
+        g.ndata['node_emb'] = torch.zeros(g.number_of_nodes(), self.emb_dim, device=self.device)
+        g.ndata['node_emb'][:self.user_num] = self.user_embedding_layer(torch.tensor(range(self.user_num)).to(self.device))
+        # history_index = [nid[1:] for nid in self.all_news_ids]
+        g.ndata['node_emb'][self.user_num:] = self.News_Encoder(self.all_news_ids)
+        # print(g.device)
         # print()
-        g.ndata['cx'] = self.c0_embedding_layer_u(torch.arange(self.user_num+self.news_num, device=self.device))
+        g.ndata['cx'] = self.c0_embedding_layer_u(torch.tensor(range(g.number_of_nodes())).to(self.device))
         entity_embs = []
         entity_index = []
         
@@ -378,7 +379,6 @@ class GCRNN(nn.Module):
         # register함수는 DGL 0.9이상에서는 없어졌다.
         g.register_message_func(self.lgcn_message_func)
         g.register_reduce_func(self.lgcn_reduce_func)
-        # u_prev_list = []    # [DEBUG] 미리 빈 리스트 준비
         for i in range(latest_train_time+1): # 0 -> latest
             # g_now = splitted_g[i]
             inverse = latest_train_time - i   # 1680-i
@@ -390,11 +390,7 @@ class GCRNN(nn.Module):
                 # print(user_seed_)
                 user_prev_hn = g.ndata['node_emb'][user_seed_]#.to(self.device1)
                 user_prev_cn = g.ndata['cx'][user_seed_]#.to(self.device1)
-                # u_prev_list.append(user_prev_cn)
-                # u_prev_list[-1].register_hook(
-                #     lambda g, t=i: print(f"step {t} user_prev_cn grad norm =", g.norm())
-                # )
-                
+
                 # ### 여러 번 더해지는 것을 방지
                 # original_node_embs = g.ndata['node_emb']
                 # aggregator  = torch.zeros_like(original_node_embs)
@@ -428,20 +424,8 @@ class GCRNN(nn.Module):
                 user_input = self.propagate_lightgcn(g, user_seed_, gcn_seed_1hopedge_per_time[inverse])
 
                 user_hn, user_cn = self.user_RNN(user_input, (user_prev_hn, user_prev_cn))   # RNN이 실행되는 time gap이 유저임베딩마다 다름
-                # g.ndata['node_emb'][user_seed_] = user_hn
-                # g.ndata['cx'][user_seed_] = user_cn
-                # 수정된 코드:
-                old_emb = g.ndata['node_emb']                 # 현재 노드 임베딩 (텐서)
-                new_emb = old_emb.clone()                     # 전체 복사본 생성 (그래디언트 연결 보존)
-                new_emb[user_seed_] = user_hn           # 필요한 인덱스만 갱신
-                g.ndata['node_emb'] = new_emb                 # 수정된 전체 텐서 한 번에 할당
-
-                # LSTM cell state도 동일하게 처리
-                old_cx = g.ndata['cx']
-                new_cx = old_cx.clone()
-                new_cx[user_seed_] = user_cn
-                g.ndata['cx'] = new_cx
-                
+                g.ndata['node_emb'][user_seed_] = user_hn
+                g.ndata['cx'][user_seed_] = user_cn
                 seed_emb = g.ndata['node_emb'][list(seed_list[i])]   # user_id 순으로 정렬되진 않음
                 user_changed_in_global = torch.tensor(list(seed_list[i])) * latest_train_time + i   # user_id 순으로 index 크기가 정렬되게 함
                 # 같은 유저라도 timestamp에 따라 고유한 index를 갖도록 해줌

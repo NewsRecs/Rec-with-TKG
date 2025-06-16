@@ -15,7 +15,7 @@ from model.config_3w import Config
 if Config.hop == 1:
     from model.GCRNN import GCRNN
 elif Config.hop == 2:
-    from model.GCRNN_for_2hop import GCRNN
+    from model.GCRNN_for_2hop_ver2 import GCRNN
 else:
     from model.GCRNN_for_3hop import GCRNN    
 from utils.make_train_datas_3w import make_train_datas
@@ -42,14 +42,16 @@ def main():
     # 0) device 및 batch_size 설정
     torch.cuda.set_device(Config.gpu_num)
     device = torch.device(f"cuda:{Config.gpu_num}" if torch.cuda.is_available() else "cpu")
-    original_batch_size = 150
+    original_batch_size = Config.batch_size
     ### window size에 따른 snapshots 수 계산
     interval_minutes = Config.interval_minutes
     interval_hours = interval_minutes / 60
-    snapshot_weeks = 6   ### history + train
+    snapshot_weeks = 18/7#18/7   ### history + train
     snapshots_num = int(snapshot_weeks * 7 * 24 / interval_hours)   # 2016
     print("snapshots_num:", snapshots_num)
-    
+    # device = torch.device("cpu")
+
+
     print('Available devices ', torch.cuda.device_count())
     print('Current cuda device ', torch.cuda.current_device())
     print(torch.cuda.get_device_name(device))
@@ -64,7 +66,7 @@ def main():
     g, splitted_g = split_train_graph(
         snapshot_weeks,
         interval_hours, 
-        f'psj/Adressa_4w/datas/total_graph_full_reciprocal_{interval_minutes}m.bin'
+        f'psj/Adressa_3w/datas/total_graph_full_reciprocal_{interval_minutes}m.bin'
     )
     # print(g.number_of_nodes())
     # exit()
@@ -98,12 +100,12 @@ def main():
     clicked_news_ids = df['clicked_news'].unique()
     combined_news_df = combined_news_df[combined_news_df['clicked_news'].isin(clicked_news_ids)].reset_index(drop=True)
     """
-    # file_path = 'psj/Adressa_3w/datas/3w_behaviors.tsv'
-    # df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
-    # criteria_time1 = pd.Timestamp('2017-01-05 00:00:00')
-    # criteria_time2 = pd.Timestamp('2017-01-26 00:00:00')
-    # df['click_time'] = pd.to_datetime(df['click_time'])
-    # df = df[(criteria_time1 <= df['click_time']) & (df['click_time'] < criteria_time2)]
+    file_path = 'psj/Adressa_3w/datas/3w_behaviors.tsv'
+    df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
+    criteria_time1 = pd.Timestamp('2017-01-05 00:00:00')
+    criteria_time2 = pd.Timestamp('2017-01-12 00:00:00')
+    df['click_time'] = pd.to_datetime(df['click_time'])
+    df = df[(criteria_time1 <= df['click_time']) & (df['click_time'] < criteria_time2)]
     
     # df['category'] = df['category'].fillna('No category|No subcategory')
     # df[['category', 'subcategory']] = df['category'].str.split('|', n=1, expand=True)
@@ -111,13 +113,13 @@ def main():
     # 3개의 df를 합치기 (ignore_index=True로 인덱스 재설정) - 모든 뉴스 고려
     # 전체 뉴스 정보 로드
     combined_news_df = pd.read_csv(
-        'psj/Adressa_4w/history/all_news.tsv',   # _nyheter_splitted
+        'psj/Adressa_3w/datas/all_news.tsv',   # _nyheter_splitted
         sep='\t'
     ).rename(columns={'newsId': 'clicked_news'})
     
-    all_news_ids = pd.read_csv('psj/Adressa_4w/history/news2int.tsv', sep='\t')['news_id']
+    all_news_ids = pd.read_csv('psj/Adressa_3w/datas/news2int.tsv', sep='\t')['news_id']
     news_num = len(all_news_ids)
-    user2int_df = pd.read_csv(os.path.join('psj/Adressa_4w/history/', 'user2int.tsv'), sep='\t')
+    user2int_df = pd.read_csv(os.path.join('psj/Adressa_3w/datas/', 'user2int.tsv'), sep='\t')
     user_num = len(user2int_df['user_int'])
     all_users = [i for i in range(user_num)]
     
@@ -127,7 +129,7 @@ def main():
         'category': 'first',
         'subcategory': 'first'
     })
-    # print(news_info[['category', 'subcategory']].head(10))
+    # print(news_info)
 
     # title -> token -> index
     news_info['title_words'] = news_info['title'].apply(tokenize_title)
@@ -136,15 +138,14 @@ def main():
     )
     
     # category, subcategory -> index
-    category2int = pd.read_csv('psj/Adressa_4w/datas/category2int.tsv', sep='\t')   # _nyheter_splitted_for_NE    
+    category2int = pd.read_csv('psj/Adressa_3w/datas/category2int.tsv', sep='\t')   # _nyheter_splitted_for_NE    
     cat_num = Config.num_categories
     
     # category와 subcategory 매핑 딕셔너리 생성
     category_map = category2int.set_index('category')['int'].to_dict()
     news_info['category_idx'] = news_info['category'].map(category_map)
     news_info['subcategory_idx'] = news_info['subcategory'].map(category_map)
-    # print(news_info[['category_idx', 'subcategory_idx']].head(20))
-    # exit()
+
     # # 3) 범위 검증
     # max_idx = int(max(news_info['category_idx'].max(),
     #                 news_info['subcategory_idx'].max()))
@@ -169,7 +170,7 @@ def main():
 
 
     ### Loading idx_infos for calculating NLL loss
-    train_ns_idx_batch, _ = ns_indexing('psj/Adressa_4w/train/train_ns.tsv', original_batch_size, user_num=user_num)
+    train_ns_idx_batch, _ = ns_indexing('psj/Adressa_3w/train/train_ns.tsv', original_batch_size, user_num=user_num)
     # train_user_idx_batch = torch.load('./psj/Adressa_4w/train/train_user_idx_batch.pt')   # 사실 얘는 필요 없음...
 
     
@@ -179,9 +180,9 @@ def main():
     """
     ns_indexing 파일 경로 수정
     """
-    test_datas = make_test_datas(snapshots_num)
+    test_datas = make_test_datas(snapshots_num=snapshots_num)
     test_news, test_time, test_empty_check = zip(*test_datas)
-    test_ns_idx_batch, test_cand_score_weight_batch = ns_indexing('psj/Adressa_4w/test/test_ns.tsv', original_batch_size, user_num=user_num, test=True)
+    test_ns_idx_batch, test_cand_score_weight_batch = ns_indexing('psj/Adressa_3w/test/test_ns.tsv', original_batch_size, user_num=user_num, test=True)
     
     # with open('./psj/Adressa_4w/test/test_datas.pkl', 'rb') as f:
     #     datas = pickle.load(f)
@@ -202,7 +203,7 @@ def main():
     # snapshots_num = snapshot_weeks * 7 * 24 * 2   # 2016
 
     # wandb 초기화 및 config 설정
-    wandb.init(project="TKG_for_NewsRec_7w", config={
+    wandb.init(project="TKG_for_NewsRec_3w", config={
         "learning_rate": learning_rate,
         "num_epochs": num_epochs,
         "batch_size": original_batch_size,
@@ -210,7 +211,7 @@ def main():
         "history_length": history_length,
         "snapshot_weeks": snapshot_weeks,
         "snapshots_num": snapshots_num,
-    }, name=f"{int(snapshot_weeks) + 1}w Adressa_hop_{Config.hop}_window size_{interval_hours}h_seed {random_seed}")
+    }, name=f"{int(snapshot_weeks) + 1}w Adressa_method_{Config.method}_score adjust_{Config.adjust_score}_batch size {original_batch_size}_seed {random_seed}")
     
     # 3) 모델 초기화
     model = GCRNN(
@@ -243,9 +244,9 @@ def main():
     # (2) EarlyStopping 객체 생성
     early_stopper = EarlyStopping(
         emb_dim=emb_dim,      # emb_dim 등 모델 설정에 맞춰 전달
-        patience=3,           # 개선 없으면 3epoch 후 스탑(예시)
+        patience=3,           # 개선 없으면 5epoch 후 스탑(예시)
         min_delta=1e-4,
-        ckpt_dir=f'psj/Adressa_4w/1_hop_ckpt/bs_{original_batch_size}_lr_{learning_rate}_seed_{random_seed}', 
+        ckpt_dir=f'psj/Adressa_3w/1_hop_ckpt/bs_{original_batch_size}_lr_{learning_rate}_seed_{random_seed}', 
         verbose=True,
         save_all=False        # True로 설정하면 매 epoch마다 체크포인트 저장
     )
@@ -431,6 +432,7 @@ def main():
     print(f" - nDCG@5  : {best_ndcg5:.4f}")
     print(f" - nDCG@10 : {best_ndcg10:.4f}")
     print(f" - avg     : {early_stopper.best_score:.4f}\n")
+    print(f"window size: {round(Config.interval_minutes/60, 2)}h")
 
     # wandb 세션 종료
     wandb.finish()

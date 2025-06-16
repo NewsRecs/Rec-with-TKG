@@ -6,7 +6,6 @@ from tqdm import tqdm
 import pandas as pd
 import pickle
 import dgl
-from ..model.config_3w import Config
 
 """
 train_ns.tsv를 만드는 파일 (tkg_train_negative_samples_lt36_ns4 -> train_ns; 즉, 후보 뉴스들를 int로 매핑)
@@ -166,7 +165,7 @@ print()
 # exit()
 
 
-ALPHA = Config.ALPHA              # 0.2
+ALPHA = 0.1              # 0.2
 LIFETIME_MIN = THRESHOLD_HOUR #* 60     # 36h
 
 def weight_by_lifetime(click_t, pub_t):

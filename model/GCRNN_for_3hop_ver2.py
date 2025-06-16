@@ -2,12 +2,11 @@ from torch import nn
 import dgl
 import torch
 from tqdm import tqdm
-# from utils import binary_search
 import numpy as np
 import gc
 import random
+import torch.nn.functional as F
 from utils.nce_loss import NCELoss
-from typing import Optional, List
 
 from model.config import Config
 if Config.method == 'cnn_attention':
@@ -57,7 +56,7 @@ class GCRNN(nn.Module):
     4) Loss 계산
     5) Backpropagation
     """
-    def __init__(self, all_news_ids, news_id_to_info, user_num, cat_num, news_num, pretrained_word_embedding=None, emb_dim=100, batch_size=500, snapshots_num=1680):
+    def __init__(self, all_news_ids, news_id_to_info, user_num, cat_num, news_num, pretrained_word_embedding, emb_dim=100, batch_size=150, snapshots_num=1680):
         """
         학습 대상
         1. user embeddings
@@ -89,7 +88,7 @@ class GCRNN(nn.Module):
         self.all_news_ids = all_news_ids   # news_int 순서대로 id 저장됨
         self.news_id_to_info = news_id_to_info
         
-        
+    ### LSTUR NewsEncoder        
     # def News_Encoder(self, news_ids):
     #     # print("Processing news embeddings \n")
     #     # 뉴스 embeddings 생성
@@ -107,7 +106,7 @@ class GCRNN(nn.Module):
     #             news_embeddings[i] = torch.randn(self.emb_dim, device=self.device)
         
     #     return news_embeddings
-
+    
     def News_Encoder(self, news_ids, max_batch: int = 512):
         """
         news_ids  : 리스트(int) - news_int 순서
@@ -136,6 +135,14 @@ class GCRNN(nn.Module):
             cats = torch.tensor(batch_cats, dtype=torch.long, device=self.device)
             scats = torch.tensor(batch_scats, dtype=torch.long, device=self.device)
 
+            ### MSA 기준 debug 코드
+            # assert torch.max(padded) < self.news_encoder.word_encoder.num_embeddings, \
+            #                             f"Word index OOB: {torch.max(padded)} >= {self.news_encoder.word_encoder.num_embeddings}"
+            # assert torch.max(cats) < self.news_encoder.category_embedding.num_embeddings, \
+            #                             f"Cat index OOB: {torch.max(cats)} >= {self.news_encoder.category_embedding.num_embeddings}"
+            # assert torch.max(scats) < self.news_encoder.category_embedding.num_embeddings, \
+            #                             f"SubCat index OOB: {torch.max(scats)} >= {self.news_encoder.category_embedding.num_embeddings}"
+                        
             # ② MSA 뉴스 인코더 한 번에 호출
             nv = self.news_encoder(padded, cats, scats)   # (B, emb_dim)
             news_embeddings[batch_idx] = nv
@@ -167,98 +174,28 @@ class GCRNN(nn.Module):
         _flush()
 
         return news_embeddings
+
     
-    # ------------------------------------------------------------------
-    # LightGCN 초기화 (K, α 세팅) – 논문 식 (3)(4) 반영
-    # ------------------------------------------------------------------
-    def _init_lightgcn(self, K: int = 3, alpha: Optional[List[float]] = None):
-        """K: propagation 층 수, alpha: layer combination weight list."""
-        self.K = K
-        # α_k = 1/(K+1) 기본값 – Layer Combination 식 (4) fileciteturn1file2
-        if alpha is None:
-            self.alpha = torch.tensor([1.0 / (K + 1)] * (K + 1), device=self.device)
-        else:
-            assert len(alpha) == K + 1
-            self.alpha = torch.tensor(alpha, device=self.device)
+    def message_func(self, edges):
+        # 엣지 메시지는 뉴스 임베딩과 엣지 임베딩의 element-wise product
+        return {'msg': edges.src['node_emb'] * self.rel_embedding[edges.data['cat_idx'].type(torch.LongTensor)]}
+
+    def reduce_func(self, nodes):
+        # 메시지를 상수 c로 나눈 뒤, 기존 임베딩과 더해줌 (residual)
+        # aggregated = torch.sum(nodes.mailbox['msg'], dim=1) / self.c
+        aggregated = nodes.mailbox['msg'].mean(1)
+        return {'node_emb2': aggregated}   # new_feat -> feat: GCN 결과가 바로 update되도록 바꿈
+                                                               # 위 주석처럼 할 경우 batch로 나눠서 GCN을 실행하기 때문에 오류 발생 가능성
+                                                               # 다시 new_feat으로 생성하는 방식 사용        
+
     
-    def lgcn_message_func(self, edges):
-        # deg 정규화 1/√(deg_u * deg_v)
-        coefficient = torch.rsqrt(edges.src['deg'] * edges.dst['deg']).unsqueeze(1)
-        if not self.use_cat_emb:
-            cat_embedding = self.rel_embedding[edges.data['cat_idx'].type(torch.LongTensor).to(self.device)]
-            msg = edges.src['h'] * cat_embedding * coefficient  # 관계별 가중치(선택)
-        else:
-            msg = edges.src['h'] * coefficient
-        return {'msg': msg}
-    
-    def lgcn_reduce_func(self, nodes):
-        return {'h': nodes.mailbox['msg'].sum(1)}
-    
-    # def message_func(self, edges):
-    #     # 엣지 메시지는 뉴스 임베딩과 엣지 임베딩의 element-wise product
-    #     return {'msg': edges.src['node_emb'] * self.rel_embedding[edges.data['cat_idx'].type(torch.LongTensor)]}
-
-    # def reduce_func(self, nodes):
-    #     # 메시지를 상수 c로 나눈 뒤, 기존 임베딩과 더해줌 (residual)
-    #     # aggregated = torch.sum(nodes.mailbox['msg'], dim=1) / self.c
-    #     aggregated = nodes.mailbox['msg'].mean(1)
-    #     return {'node_emb2': aggregated}   # new_feat -> feat: GCN 결과가 바로 update되도록 바꿈
-    #                                                            # 위 주석처럼 할 경우 batch로 나눠서 GCN을 실행하기 때문에 오류 발생 가능성
-    #                                                            # 다시 new_feat으로 생성하는 방식 사용        
-
-    # ------------------------------------------------------------------
-    # LightGCN K‑layer propagation + Layer Combination
-    # ------------------------------------------------------------------
-    # def propagate_lightgcn(self, g, seed_nodes, edges):
-    #     """g: DGLGraph, seed_nodes: 업데이트 후 읽어올 노드 index 리스트"""
-    #     # (1) 차수 정보 준비 – 0인 노드는 1로 클램프
-    #     g.ndata['deg'] = g.in_degrees().float().clamp(min=1).to(self.device)
-    #     # (2) 0‑th layer 임베딩을 h0로 저장
-    #     g.ndata['h'] = g.ndata['node_emb']
-    #     layer_embs = [g.ndata['h']]
-
-    #     # (3) K 번 1‑hop propagation
-    #     for _ in range(self.K):
-    #         g.send_and_recv(edges = edges)
-    #         layer_embs.append(g.ndata['h'])
-
-    #     # (4) Weighted sum → 최종 임베딩 (식 (4))
-    #     h_final = torch.stack(layer_embs, dim=0)  # (K+1, N, d)
-    #     h_final = (self.alpha.view(-1, 1, 1) * h_final).sum(0)
-    #     g.ndata['node_emb'] = h_final  # 다음 모듈(RNN 등)에서 사용
-    #     return h_final[seed_nodes]
-
-    ### 메모리 최적화
-    def propagate_lightgcn(self, g, seed_nodes, edges):
-        g.ndata['deg'] = g.in_degrees().float().clamp(min=1).to(self.device)
-        g.ndata['h'] = g.ndata['node_emb']
-
-        # ★ 누적합으로 변경 → (K+1)배 저장 안 함
-        h_accum = self.alpha[0] * g.ndata['h']          # α₀·h⁽⁰⁾
-        for k in range(self.K):
-            g.send_and_recv(edges=edges)
-            h_accum = h_accum + self.alpha[k+1] * g.ndata['h']  # += αₖ₊₁·h⁽ᵏ⁺¹⁾
-
-        g.ndata['node_emb'] = h_accum
-        # 메모리 해제
-        with torch.no_grad():
-            del g.ndata['deg'], g.ndata['h'];  torch.cuda.empty_cache()
-        return h_accum[seed_nodes]
-
-
     def seq_GCRNN_batch(self, g, sub_g, latest_train_time, seed_list, history_length):
         gcn_seed_per_time = []
         gcn_seed_1hopedge_per_time = []
         gcn_1hopneighbor_per_time = []
         gcn_seed_2hopedge_per_time = []
-        gcn_seed_2nd_layer_edge_per_time = []   # 1/2-hop edges를 (src, dst) 형태로 표현하여 담은 리스트
-        # for 3-hop
-        # gcn_2hopneighbor_per_time = []
-        # gcn_seed_3hopedge_per_time = []
-        # gcn_seed_3rd_layer_edge_per_time = []   # 1/2/3-hop edges를 (src, dst) 형태로 표현하여 담은 리스트
-        
         future_needed_nodes = set()
-        check_lifetime = np.zeros(self.user_num + self.news_num)
+        check_lifetime = np.zeros(self.user_num)
         for i in range(latest_train_time, -1, -1): # latest -> 0 미래부터 본다.
             # print(len(future_needed_nodes))
             
@@ -277,83 +214,38 @@ class GCRNN(nn.Module):
             # global_to_local_user = {gid: local for local, gid in enumerate(sub_g_user_ids)}
             # valid_future_nodes = [global_to_local_user[gid] for gid in future_needed_nodes if gid in global_to_local_user]
 
-            # -------------- 1‑, 2‑hop(원래 코드) ----------------
+            
             # 1hop edges of seed at i
             hop1_u, hop1_v = sub_g[i].in_edges(v = list(future_needed_nodes), form = 'uv')
             # hop1_u, hop1_v = sub_g[i].in_edges(v = valid_future_nodes, form = 'uv', etype='clicked_reverse')   # u (news) -> v (user) 이다
             ### sub_g를 쓰는 것은 snapshot 시간을 조절하기 위함임 - 해당 시간에 존재하는 edges만 뽑아내려고!!! 
-            hop1_neighbors_at_i, _, seed_edges_at_i = sub_g[i].in_edges(v = list(future_needed_nodes), form = 'all')
+            # hop1_neighbors_at_i, _, seed_edges_at_i = splitted_g[i].in_edges(v = list(future_needed_nodes), form = 'all')
             # node는 그대로 가져와지지만, splitted에서 추출한 edge id는 g의 edge id와 다를 수 있다.
             # 따라서 'edge id'가 아니라 'node id 쌍'로 edge를 기록해야 한다.
-            ### form = 'all': 순서대로 src, output, edge (array)
 
             # sample한 user들(entity)에 대해 in-edge들 찾는다.
             # hop 1 neighbors는 2layer를 위해 찾아둔것
 
-            # 2번째 layer를 위한 edge
             # check_lifetime[hop1_neighbors_at_i] = history_length
-            # hop2_u, hop2_v = sub_g[i].in_edges(v = hop1_neighbors_at_i, form = 'uv') # hop2_edges_at_i = sub_g[i].in_edges(v = hop1_neighbors_at_i, form = 'eid')
-            # ---------------------------------------------------
+            # hop2_edges_at_i = splitted_g[i].in_edges(v = hop1_neighbors_at_i, form = 'eid')
+            # 2번째 layer를 위한 edge
 
-            # -------------- *** 3‑hop 추가 *** ------------------
-            hop2_neighbors_at_i, _, seed_edges_at_i_2hop = sub_g[i].in_edges(v = hop1_neighbors_at_i, form = 'all')
-            # 3번째 layer를 위한 edge            
-            # check_lifetime[hop2_neighbors_at_i] = history_length
-            # hop3_u, hop3_v = sub_g[i].in_edges(v=hop2_neighbors_at_i, form='uv')
-            # ---------------------------------------------------
-
-            gcn_seed_per_time.append(list(future_needed_nodes)) # Seed            
-            ## for 1-hop
+            gcn_seed_per_time.append(list(future_needed_nodes)) # Seed
+            # gcn에 seed로 사용되는 entity들이다. 사실 edge를 사용하기는 하지만..
+            # 미래에서부터 쌓아왔기 때문에(사용하는 history length가 100이라서ㅋ) 과거로 갈수록 꽤나 양이 커진다.
+            
+            # hop1_u,v 다시 global index로 변환
+            # local_to_global_user = {local: gid for local, gid in enumerate(sub_g_user_ids)}
+            # valid_hop1_v = [local_to_global_user[local.item()] for local in hop1_v]
+            # sub_g_news_ids = sub_g[i].nodes['news'].data['news_ids'].tolist()
+            # local_to_global_news = {local: gid for local, gid in enumerate(sub_g_news_ids)}
+            # valid_hop1_u = [local_to_global_news[local.item()] for local in hop1_u]
+            
             gcn_seed_1hopedge_per_time.append((hop1_u, hop1_v))
+            # gcn_seed_1hopedge_per_time.append((valid_hop1_u, valid_hop1_v)) # Seed's Edge
             
-            ##### 1-hop edge만 사용
-            # ### for 2-hop
-            # gcn_1hopneighbor_per_time.append(hop1_neighbors_at_i) # Seed's Edge's source node
-            # gcn_seed_2hopedge_per_time.append((hop2_u, hop2_v)) # Source node's edge
-
-            # ### for 3-hop
-            # gcn_2hopneighbor_per_time.append(hop2_neighbors_at_i)
-            # gcn_seed_3hopedge_per_time.append((hop3_u, hop3_v))
-            # # ---------------------------------------------------
-            
-            # # 에지가 전혀 없는 timestamp에서는 스킵
-            # if len(hop1_u) == 0 and len(hop2_u) == 0 and len(hop3_u) == 0:
-            #     empty = (torch.tensor([], dtype=torch.long), torch.tensor([], dtype=torch.long))
-            #     gcn_seed_2nd_layer_edge_per_time.append(empty)
-            #     gcn_seed_3rd_layer_edge_per_time.append(empty)
-            #     continue
-            
-            # ### gcn_seed_2nd_layer_edge_per_time을 만들어야 함 (1hop edge랑 2hop edge를 중복 없이 합쳐야 함)
-            # # --- 1-hop, 2-hop 에지를 합쳐서 중복 제거 ---
-            # all_hop1_2_u = torch.cat([hop1_u, hop2_u])
-            # all_hop1_2_v = torch.cat([hop1_v, hop2_v])
-
-            # # (u, v) 쌍을 [N, 2] 형태로 만든 뒤, 중복 쌍 제거
-            # unique_hop1_2_uv = torch.unique(torch.stack([all_hop1_2_u, all_hop1_2_v], dim=1), dim=0)
-            # final_hop1_2_u, final_hop1_2_v = unique_hop1_2_uv[:, 0], unique_hop1_2_uv[:, 1]
-            
-            # gcn_seed_2nd_layer_edge_per_time.append((final_hop1_2_u, final_hop1_2_v))
-            
-            # ### for 3-hop
-            # all_hop_u = torch.cat([hop1_u, hop2_u, hop3_u])
-            # all_hop_v = torch.cat([hop1_v, hop2_v, hop3_v])
-
-            # # (u, v) 쌍을 [N, 2] 형태로 만든 뒤, 중복 쌍 제거
-            # unique_all_uv = torch.unique(torch.stack([all_hop_u, all_hop_v], dim=1), dim=0)
-            # final_all_u, final_all_v = unique_all_uv[:, 0], unique_all_uv[:, 1]
-            
-            # gcn_seed_3rd_layer_edge_per_time.append((final_all_u, final_all_v))
-            
-            # ##### check
-            # print("hop1_u shape:", hop1_u.shape, "hop1_v shape:", hop1_v.shape)
-            # print("hop2_u shape:", hop2_u.shape, "hop2_v shape:", hop2_v.shape)
-            # print("all_hop_u shape:", all_hop_u.shape, "all_hop_v shape:", all_hop_v.shape)
-
-            # stacked = torch.stack([all_hop_u, all_hop_v], dim=1)
-            # print("stacked shape:", stacked.shape)
-            # unique_uv = torch.unique(stacked, dim=0)
-            # print("unique_uv shape:", unique_uv.shape)
-            
+            #gcn_1hopneighbor_per_time.append(hop1_neighbors_at_i) # Seed's Edge's source node
+            #gcn_seed_2hopedge_per_time.append(hop2_edges_at_i) # Source node's edge
             check_lifetime[check_lifetime>0] -= 1
             try:
                 future_needed_nodes = future_needed_nodes - set(np.where(check_lifetime==0)[0]) # seed next
@@ -361,24 +253,19 @@ class GCRNN(nn.Module):
                 pass
         
         self.rel_embedding = self.cat_embedding_layer(torch.tensor(range(self.cat_num)).to(self.device))
-        # # 초기화해줘야 밑에서 슬라이싱 가능
-        # g.ndata['node_emb'] = torch.zeros(g.number_of_nodes(), self.emb_dim, device=self.device)
-        user_embeddings = self.user_embedding_layer(torch.tensor(range(self.user_num)).to(self.device))
-        news_embeddings = self.News_Encoder(self.all_news_ids)
-        g.ndata['node_emb'] = torch.cat([user_embeddings, news_embeddings], dim=0)
+        # 초기화해줘야 밑에서 슬라이싱 가능
+        g.ndata['node_emb'] = torch.zeros(g.number_of_nodes(), self.emb_dim, device=self.device)
+        g.ndata['node_emb'][:self.user_num] = self.user_embedding_layer(torch.tensor(range(self.user_num)).to(self.device))
+        # history_index = [nid[1:] for nid in self.all_news_ids]
+        g.ndata['node_emb'][self.user_num:] = self.News_Encoder(self.all_news_ids)
+        # print(g.device)
         # print()
-        g.ndata['cx'] = self.c0_embedding_layer_u(torch.arange(self.user_num+self.news_num, device=self.device))
+        g.ndata['cx'] = self.c0_embedding_layer_u(torch.tensor(range(g.number_of_nodes())).to(self.device))
         entity_embs = []
         entity_index = []
-        
-        # LightGCN 옵션
-        self.use_cat_emb = self.config.unique_category  # 카테고리 임베딩을 쓰려면 True
-        self._init_lightgcn(K=self.config.hop)  # K 층, α 기본값
-        
         # register함수는 DGL 0.9이상에서는 없어졌다.
-        g.register_message_func(self.lgcn_message_func)
-        g.register_reduce_func(self.lgcn_reduce_func)
-        # u_prev_list = []    # [DEBUG] 미리 빈 리스트 준비
+        g.register_message_func(self.message_func)
+        g.register_reduce_func(self.reduce_func)
         for i in range(latest_train_time+1): # 0 -> latest
             # g_now = splitted_g[i]
             inverse = latest_train_time - i   # 1680-i
@@ -390,58 +277,26 @@ class GCRNN(nn.Module):
                 # print(user_seed_)
                 user_prev_hn = g.ndata['node_emb'][user_seed_]#.to(self.device1)
                 user_prev_cn = g.ndata['cx'][user_seed_]#.to(self.device1)
-                # u_prev_list.append(user_prev_cn)
-                # u_prev_list[-1].register_hook(
-                #     lambda g, t=i: print(f"step {t} user_prev_cn grad norm =", g.norm())
-                # )
-                
-                # ### 여러 번 더해지는 것을 방지
-                # original_node_embs = g.ndata['node_emb']
-                # aggregator  = torch.zeros_like(original_node_embs)
-                # # 3-hop information aggregated
-                # edge_num = len(gcn_seed_3rd_layer_edge_per_time[inverse][0])
-                # g.send_and_recv(edges = gcn_seed_3rd_layer_edge_per_time[inverse])
-                # if edge_num > 0:
-                #     try:
-                #         aggregator += g.ndata.pop('node_emb2')   # hop별 결과 누적
-                #     except:
-                #         pass
-                # # 2-hop information aggregated
-                # edge_num = len(gcn_seed_2nd_layer_edge_per_time[inverse][0])
-                # g.send_and_recv(edges = gcn_seed_2nd_layer_edge_per_time[inverse])
-                # if edge_num > 0:
-                #     try:
-                #         aggregator += g.ndata.pop('node_emb2')   # hop별 결과 누적
-                #     except:
-                #         pass
-                # # 1-hop information aggregated    
-                # edge_num = len(gcn_seed_1hopedge_per_time[inverse][0])
-                # g.send_and_recv(edges = gcn_seed_1hopedge_per_time[inverse])
-                # if edge_num > 0:
-                #     try:
-                #         aggregator += g.ndata.pop('node_emb2')   # hop별 결과 누적
-                #     except:
-                #         pass
-                # # 최종 노드 업데이트 
-                # g.ndata['node_emb'] = original_node_embs + aggregator / 3
 
-                user_input = self.propagate_lightgcn(g, user_seed_, gcn_seed_1hopedge_per_time[inverse])
+                edge_num = len(gcn_seed_1hopedge_per_time[inverse][0])
+                if edge_num > 0:
+                    h = g.ndata['node_emb'].clone()
+                    for _ in range(3):
+                        g.ndata['x'] = h
+                        g.send_and_recv(edges = gcn_seed_1hopedge_per_time[inverse])
+                        neighbor_info = g.ndata.pop('node_emb2')
+                        h = F.relu(h + neighbor_info)
+                    g.ndata['node_emb'] = h
+
+                # g.ndata['node_emb'] = original_node_embs + aggregator / 3
+                all_user = g.ndata['node_emb']
+                user_input = g.ndata['node_emb'][user_seed_]
 
                 user_hn, user_cn = self.user_RNN(user_input, (user_prev_hn, user_prev_cn))   # RNN이 실행되는 time gap이 유저임베딩마다 다름
-                # g.ndata['node_emb'][user_seed_] = user_hn
-                # g.ndata['cx'][user_seed_] = user_cn
-                # 수정된 코드:
-                old_emb = g.ndata['node_emb']                 # 현재 노드 임베딩 (텐서)
-                new_emb = old_emb.clone()                     # 전체 복사본 생성 (그래디언트 연결 보존)
-                new_emb[user_seed_] = user_hn           # 필요한 인덱스만 갱신
-                g.ndata['node_emb'] = new_emb                 # 수정된 전체 텐서 한 번에 할당
-
-                # LSTM cell state도 동일하게 처리
-                old_cx = g.ndata['cx']
-                new_cx = old_cx.clone()
-                new_cx[user_seed_] = user_cn
-                g.ndata['cx'] = new_cx
-                
+                all_user_clone = all_user.clone()
+                all_user_clone[user_seed_] = user_hn
+                g.ndata['node_emb'] = all_user_clone
+                g.ndata['cx'][user_seed_] = user_cn
                 seed_emb = g.ndata['node_emb'][list(seed_list[i])]   # user_id 순으로 정렬되진 않음
                 user_changed_in_global = torch.tensor(list(seed_list[i])) * latest_train_time + i   # user_id 순으로 index 크기가 정렬되게 함
                 # 같은 유저라도 timestamp에 따라 고유한 index를 갖도록 해줌
@@ -502,12 +357,20 @@ class GCRNN(nn.Module):
         latest_train_time = self.snapshots_num - 1
         for i in range(latest_train_time+1):
             seed_list.append(set())
-            
+        
+        # print(len(seed_list))
+        # print(len(time_batch))
+        # print(len(user_batch))
         for time_list, user in zip(time_batch, user_batch):
             for time in time_list:
-                seed_list[time].add(user)  
-                seed_entid.append(user)
-                train_t.append(time)
+                try:
+                    seed_list[time].add(user)  
+                    seed_entid.append(user)
+                    train_t.append(time)
+                except:
+                    print("time:", time)
+                    exit()
+                    
                 
         ent_embs = self.seq_GCRNN_batch(g, sub_g, latest_train_time, seed_list, history_length)
         _, index_for_ent_emb = torch.unique(torch.tensor(seed_entid) * latest_train_time + torch.tensor(train_t), 
@@ -599,7 +462,7 @@ class GCRNN(nn.Module):
             for time in time_list:
                 test_t.append(time)
         
-        latest_train_time = self.snapshots_num - 1   # train까지 포함한 snapshot 수는 2016개
+        latest_train_time = self.snapshots_num-1#2015   # train까지 포함한 snapshot 수는 2016개
         seed_entid = []
         test_t = []
         for i in range(latest_train_time+1):
@@ -621,7 +484,17 @@ class GCRNN(nn.Module):
         # candidate_n_embs: (test_click_num, (1 + 20), emb_dim); 1: target, 20: ns sample 수
         # ns_idx: (test_click_num, 21)
         candidate_user_embs = u_time_embs#[user_score_idx]   # user_score_idx: (test_click_num, )
-        candidate_user_embs = candidate_user_embs.unsqueeze(1)   # (test_click_num, 1, 128)            
+        candidate_user_embs = candidate_user_embs.unsqueeze(1)   # (test_click_num, 1, 128)
+        
+        # # GCRNN.inference 맨 아래 (곱셈 직전) ------------------------------------
+        # print("ns_idx len:", len(ns_idx),
+        #     "user_embs:", candidate_user_embs.shape,  # (?, 1, 128)
+        #     "neg_embs:", candidate_n_embs.shape)      # (?, K, 128)
+
+        # assert candidate_user_embs.size(0) == candidate_n_embs.size(0), \
+        #     f"row mismatch {candidate_user_embs.size(0)} vs {candidate_n_embs.size(0)}"
+        # # -----------------------------------------------------------------------
+            
         candidate_score = (candidate_user_embs * candidate_n_embs).sum(dim=-1)
         # candidate_n_embs: (test_click_num, emb_dim)*(test_click_num, 21, emb_dim)
         # candidate_score: (test_click_num, 21)        

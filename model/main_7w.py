@@ -15,7 +15,7 @@ from model.config import Config
 if Config.hop == 1:
     from model.GCRNN import GCRNN
 elif Config.hop == 2:
-    from model.GCRNN_for_2hop import GCRNN
+    from model.GCRNN_for_2hop_ver2 import GCRNN
 else:
     from model.GCRNN_for_3hop import GCRNN    
 from utils.make_train_datas import make_train_datas

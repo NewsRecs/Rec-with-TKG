@@ -82,6 +82,8 @@ class ScaledDotProductAttention(nn.Module):
             scores = scores * attn_mask.unsqueeze(dim=-2)
 
         attn = scores / (torch.sum(scores, dim=-1, keepdim=True) + 1e-8)
+        # print(scores.shape)
+        # print(attn.shape)        
         context = torch.matmul(attn, V)
         return context
 
