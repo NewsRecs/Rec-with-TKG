@@ -60,7 +60,7 @@ def main():
     # 0) device 및 batch_size 설정
     torch.cuda.set_device(Config.gpu_num)
     device = torch.device(f"cuda:{Config.gpu_num}" if torch.cuda.is_available() else "cpu")
-    original_batch_size = 150
+    original_batch_size = Config.batch_size
     ### window size에 따른 snapshots 수 계산
     interval_minutes = Config.interval_minutes
     interval_hours = interval_minutes / 60
