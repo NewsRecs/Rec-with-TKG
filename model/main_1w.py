@@ -55,6 +55,9 @@ random_seed = Config.seed
 random.seed(random_seed)
 np.random.seed(random_seed); torch.manual_seed(random_seed)
 if torch.cuda.is_available(): torch.cuda.manual_seed_all(random_seed)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
 
 def main():
     # 0) device 및 batch_size 설정
@@ -241,7 +244,8 @@ def main():
         pretrained_word_embedding=pretrained_word_embedding,
         emb_dim=emb_dim,
         batch_size=batch_size,
-        snapshots_num=snapshots_num
+        snapshots_num=snapshots_num,
+        config=Config
     ).to(device=device)
     optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate, weight_decay=0.01)   
     

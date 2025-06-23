@@ -223,7 +223,8 @@ def main():
         pretrained_word_embedding=pretrained_word_embedding,
         emb_dim=emb_dim,
         batch_size=batch_size,
-        snapshots_num=snapshots_num
+        snapshots_num=snapshots_num,
+        config=Config
     )    
     optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate, weight_decay=0.01)   
     

@@ -7,22 +7,8 @@ import gc
 import random
 from utils.nce_loss import NCELoss
 
-from model.config_1w import Config
-if Config.method == 'cnn_attention':
-    if Config.no_category:
-        from utils.title_news_encoder import NewsEncoder
-    else:
-        from utils.full_news_encoder import NewsEncoder
-else:
-    if Config.no_category:
-        from utils.title_MSA_news_encoder import NewsEncoder
-    else:    
-        from utils.MSA_news_encoder import NewsEncoder
+from utils.classify_news_encoder import get_news_encoder
 
-torch.cuda.set_device(Config.gpu_num)
-random_seed = Config.seed
-random.seed(random_seed)
-torch.manual_seed(random_seed)
 
 # ------------------------------------------------------
 # GCN 클래스 정의
@@ -55,7 +41,7 @@ class GCRNN(nn.Module):
     4) Loss 계산
     5) Backpropagation
     """
-    def __init__(self, all_news_ids, news_id_to_info, user_num, cat_num, news_num, pretrained_word_embedding, emb_dim=100, batch_size=150, snapshots_num=1680):
+    def __init__(self, all_news_ids, news_id_to_info, user_num, cat_num, news_num, pretrained_word_embedding=None, emb_dim=100, batch_size=300, snapshots_num=1680, config=None):
         """
         학습 대상
         1. user embeddings
@@ -66,16 +52,14 @@ class GCRNN(nn.Module):
         *** g의 유저, 뉴스 노드 idx는 user2int와 news2int의 순서대로 만들어짐 (edge도 마찬가지)
         """
         super(GCRNN, self).__init__()
+        self.config = config
         self.batch_size = batch_size
         self.emb_dim = emb_dim
         self.snapshots_num = snapshots_num
-        self.device = torch.device(f"cuda:{Config.gpu_num}" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device(f"cuda:{config.gpu_num}" if torch.cuda.is_available() else "cpu")
         # self.device = torch.device("cpu")
         self.user_embedding_layer = nn.Embedding(num_embeddings=user_num, embedding_dim=emb_dim, sparse = False).to(self.device)   # GCN user 초기값
-        if not Config.unique_category:
-            self.cat_embedding_layer = nn.Embedding(num_embeddings=cat_num, embedding_dim=emb_dim, sparse = False).to(self.device)   # GCN relation 초기값
-        else:
-            self.cat_embedding_layer = nn.Embedding(num_embeddings=1, embedding_dim=emb_dim, sparse = False).to(self.device)
+        self.cat_embedding_layer = nn.Embedding(num_embeddings=cat_num, embedding_dim=emb_dim, sparse = False).to(self.device)   # GCN relation 초기값
         # GRNN에 필요한 변수들
         self.user_num = user_num
         self.cat_num = cat_num
@@ -84,7 +68,7 @@ class GCRNN(nn.Module):
         self.c0_embedding_layer_u = nn.Embedding(num_embeddings=user_num+news_num, embedding_dim=emb_dim, sparse = False).to(self.device)   # for cell state in LSTM_GCN
         self.user_RNN = nn.LSTMCell(emb_dim, emb_dim, bias = True).to(self.device)   # input dim, hn dim
         # News_Encoder에 필요한 정보들
-        self.config = Config
+        NewsEncoder = get_news_encoder(config)
         self.pretrained_word_embedding = pretrained_word_embedding
         self.news_encoder = NewsEncoder(self.config, self.pretrained_word_embedding).to(self.device)
         self.all_news_ids = all_news_ids   # news_int 순서대로 id 저장됨
@@ -180,7 +164,7 @@ class GCRNN(nn.Module):
     
     def message_func(self, edges):
         # 엣지 메시지는 뉴스 임베딩과 엣지 임베딩의 element-wise product
-        if not Config.unique_category:
+        if not self.config.unique_category:
             return {'msg': edges.src['node_emb'] * self.rel_embedding[edges.data['cat_idx'].type(torch.LongTensor)]}
         else:
             return {'msg': edges.src['node_emb'] * self.rel_embedding[0]}
@@ -257,7 +241,7 @@ class GCRNN(nn.Module):
             except:
                 pass
         
-        if Config.unique_category:
+        if self.config.unique_category:
             # num_embeddings=1짜리 Embedding에서 사용할 수 있는 인덱스는 0 하나뿐
             self.rel_embedding = self.cat_embedding_layer(torch.tensor([0], device=self.device))
         else:
