@@ -7,7 +7,7 @@ import gc
 import random
 from utils.nce_loss import NCELoss
 
-from model.config import Config
+from model.config_1w import Config
 if Config.method == 'cnn_attention':
     if Config.no_category:
         from utils.title_news_encoder import NewsEncoder

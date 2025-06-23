@@ -296,7 +296,7 @@ class GCRNN(nn.Module):
             # ---------------------------------------------------
 
             # -------------- *** 3‑hop 추가 *** ------------------
-            hop2_neighbors_at_i, _, seed_edges_at_i_2hop = sub_g[i].in_edges(v = hop1_neighbors_at_i, form = 'all')
+            # hop2_neighbors_at_i, _, seed_edges_at_i_2hop = sub_g[i].in_edges(v = hop1_neighbors_at_i, form = 'all')
             # 3번째 layer를 위한 edge            
             # check_lifetime[hop2_neighbors_at_i] = history_length
             # hop3_u, hop3_v = sub_g[i].in_edges(v=hop2_neighbors_at_i, form='uv')

@@ -9,7 +9,7 @@ import random
 from utils.nce_loss import NCELoss
 from typing import Optional, List
 
-from model.config_3w import Config
+from model.config_1w import Config
 if Config.method == 'cnn_attention':
     if Config.no_category:
         from utils.title_news_encoder import NewsEncoder
@@ -237,12 +237,12 @@ class GCRNN(nn.Module):
         h_accum = self.alpha[0] * g.ndata['h']          # α₀·h⁽⁰⁾
         for k in range(self.K):
             g.send_and_recv(edges=edges)
-            # h_accum = h_accum + self.alpha[k+1] * g.ndata['h']  # += αₖ₊₁·h⁽ᵏ⁺¹⁾
-            h_accum = h_accum.add(self.alpha[k+1] * g.ndata['h'])
-            
+            h_accum = h_accum + self.alpha[k+1] * g.ndata['h']  # += αₖ₊₁·h⁽ᵏ⁺¹⁾
+
         g.ndata['node_emb'] = h_accum
         # 메모리 해제
-        del g.ndata['deg'], g.ndata['h'];  torch.cuda.empty_cache()
+        with torch.no_grad():
+            del g.ndata['deg'], g.ndata['h'];  torch.cuda.empty_cache()
         return h_accum[seed_nodes]
 
 
@@ -296,7 +296,7 @@ class GCRNN(nn.Module):
             # ---------------------------------------------------
 
             # -------------- *** 3‑hop 추가 *** ------------------
-            hop2_neighbors_at_i, _, seed_edges_at_i_2hop = sub_g[i].in_edges(v = hop1_neighbors_at_i, form = 'all')
+            # hop2_neighbors_at_i, _, seed_edges_at_i_2hop = sub_g[i].in_edges(v = hop1_neighbors_at_i, form = 'all')
             # 3번째 layer를 위한 edge            
             # check_lifetime[hop2_neighbors_at_i] = history_length
             # hop3_u, hop3_v = sub_g[i].in_edges(v=hop2_neighbors_at_i, form='uv')
@@ -370,7 +370,6 @@ class GCRNN(nn.Module):
         g.ndata['node_emb'] = torch.cat([user_embeddings, news_embeddings], dim=0)
 
         # history_index = [nid[1:] for nid in self.all_news_ids]
-        g.ndata['node_emb'][self.user_num:] = self.News_Encoder(self.all_news_ids)
         # print(g.device)
         # print()
         # g.ndata['cx'] = self.c0_embedding_layer_u(torch.tensor(range(g.number_of_nodes())).to(self.device))
