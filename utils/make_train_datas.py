@@ -114,19 +114,19 @@ def make_train_datas(interval_minutes, week = 7):
     - shape: (user_num, train data에서 각 유저의 클릭 수)
     """
     train_news = []
-    for u_id in tqdm(range(len(all_user_ids))):
-        u_news = torch.tensor(train_df[train_df['user_int'] == u_id]['news_int'].values, dtype=torch.long)
-        train_news.append(u_news)
-        
     train_category = []
-    for u_id in tqdm(range(len(all_user_ids))):
-        u_category = torch.tensor(train_df[train_df['user_int'] == u_id]['cat_int'].values, dtype=torch.long)
-        train_category.append(u_category)
-
     train_time = []
     for u_id in tqdm(range(len(all_user_ids))):
+        u_news = torch.tensor(train_df[train_df['user_int'] == u_id]['news_int'].values, dtype=torch.long)
+        u_category = torch.tensor(train_df[train_df['user_int'] == u_id]['cat_int'].values, dtype=torch.long)
         u_time = torch.tensor(train_df[train_df['user_int'] == u_id]['time_idx'].values, dtype=torch.long)
+        train_news.append(u_news)
+        train_category.append(u_category)
         train_time.append(u_time)
+        
+    # for u_id in tqdm(range(len(all_user_ids))):
+
+    # for u_id in tqdm(range(len(all_user_ids))):
         
     # print(train_time[0])
     # print(len(train_time[0]))

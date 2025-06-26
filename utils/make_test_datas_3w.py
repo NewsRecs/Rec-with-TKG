@@ -78,13 +78,12 @@ def make_test_datas(snapshots_num: int):
     - shape: (user_num, test data에서 각 유저의 클릭 수)
     """
     test_news = []
+    test_time = []
+    test_empty_check = []
     for u_id in tqdm(range(len(all_user_ids))):
         u_news = torch.tensor(test_df[test_df['user_int'] == u_id]['news_int'].values, dtype=torch.long)
         test_news.append(u_news)
 
-    test_time = []
-    test_empty_check = []
-    for u_id in tqdm(range(len(all_user_ids))):
         u_len = len(test_df[test_df['user_int'] == u_id])
         u_time = torch.tensor([snapshots_num-1 for _ in range(u_len)], dtype=torch.long)   # train까지 포함한 snapshot 수는 2016개
         test_time.append(u_time)
