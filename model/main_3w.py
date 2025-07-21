@@ -94,7 +94,7 @@ def main():
     file_path: 사용할 데이터로 수정
     criteria time 변경
     
-    <df에 존재하는 뉴스들만 포함하도록 combined_news_df를 바꾸는 코드>
+    <df에 존재하는 뉴스들만 포함하도록 combined_news_df를 바꾸는 코드> ----------------------최종: df는 main에서 아예 안 쓰임
     - 이게 필요한지 고민
     -- news2int를 기존 그대로 사용했기 때문에, user를 제외한 모든 이런 정보들은 그대로 두는 것이 좋아보임
     clicked_news_ids = df['clicked_news'].unique()
@@ -103,7 +103,7 @@ def main():
     file_path = 'psj/Adressa_3w/datas/3w_behaviors.tsv'
     df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
     criteria_time1 = pd.Timestamp('2017-01-05 00:00:00')
-    criteria_time2 = pd.Timestamp('2017-01-12 00:00:00')
+    criteria_time2 = pd.Timestamp('2017-01-26 00:00:00')
     df['click_time'] = pd.to_datetime(df['click_time'])
     df = df[(criteria_time1 <= df['click_time']) & (df['click_time'] < criteria_time2)]
     
