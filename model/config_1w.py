@@ -22,7 +22,6 @@ class Config:
     dropout_probability = 0.2
     
     ### for MSA NewsEncoder
-    method = 'multihead_self_attention' # 'cnn_attention'
 
     head_num = 20
     head_dim = 15
@@ -32,6 +31,10 @@ class Config:
     attention_hidden_dim = 100
     
     ### for ablation studies
-    no_category = False       # NewsEncoder category 사용 여부
-    unique_category = False   # category 1개로 GCN edge message passing
-    adjust_score = True       # 수명 고려한 스코어 조정
+    method = os.getenv("METHOD") # 'cnn_attention''multihead_self_attention'
+    # NewsEncoder category 사용 여부
+    no_category = os.getenv("NO_CATEGORY", "False").lower() in ("true","1","yes")
+    # category 1개로 GCN edge message passing
+    unique_category = os.getenv("UNIQUE_CATEGORY", "False").lower() in ("true","1","yes")
+    # 수명 고려한 스코어 조정
+    adjust_score = os.getenv("ADJUST_SCORE", "False").lower() in ("true","1","yes")
