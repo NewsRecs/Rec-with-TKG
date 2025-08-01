@@ -37,8 +37,8 @@ df = pd.read_csv(train_file_path, sep='\t', encoding='utf-8')
 df['click_time'] = pd.to_datetime(df['click_time'])
 df['clicked_news'] = df['clicked_news'].str.replace(r'-\d+$', '', regex=True)
 
-criteria_time1 = pd.Timestamp('2017-01-23 00:00:00')
-criteria_time2 = pd.Timestamp('2017-01-26 00:00:00')
+criteria_time1 = pd.Timestamp('2017-01-11 00:00:00')
+criteria_time2 = pd.Timestamp('2017-01-12 00:00:00')
 train_df = df[(criteria_time1 <= df['click_time']) & (df['click_time'] < criteria_time2)]
 # 'clicked_newsId'를 기준으로 'category' 매칭
 train_df = train_df.merge(sub_train_news_df, left_on='clicked_news', right_on='newsId', how='left')

@@ -1,21 +1,3 @@
-# model_name.py
-
-
-
-"""
-2/27 17시 17분
-check, batch size 로직 두 개랑 print들만 바꿈
-
-해야 할 일 (2/28 1시 2분)
-1. validation, test 가능하도록 main, GCRNN 코드 작성 - 완
-2. chatgpt 성주dgl의 맨 위 쓰레드 참고해서 test에서만 metrics 계산하도록 코드 작성 - 완
-2*** test(5일)와 validation(2일)의 유저 및 뉴스 수가 바뀌어서 문제가 생길 수 있음 - 검토 필요! (완)
-3. validation set 및 test set 만드는 코드 작성 - 완
-3-1) make_test_datas.py에서 validation set도 만들기 - 완
-3-2) ns_idx.py를 함수화해서 main에서 import하여 사용할 수 있도록 하기 (input: batch_size) - 완
-
-"""
-
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -29,18 +11,18 @@ import numpy as np
 import time
 import random
 # import matplotlib.pyplot as plt
-from model.config_1w import Config
+from model.config_3w import Config
 if Config.hop == 1:
     from model.GCRNN import GCRNN
 elif Config.hop == 2:
-    if Config.unique_category:
-        from model.GCRNN_for_2hop import GCRNN   # GCRNN_for_2hop_ver2
-    else:
-        from model.GCRNN_for_2hop_ver2 import GCRNN   
+    from model.GCRNN_for_2hop_ver2 import GCRNN
 else:
-    from model.GCRNN_for_3hop import GCRNN    
-from utils.make_train_datas_1w import make_train_datas
-from utils.make_test_datas_1w import make_test_datas
+    if not Config.unique_category:
+        from model.GCRNN_for_3hop import GCRNN
+    else:
+        from model.GCRNN_for_3hop_ver2 import GCRNN   ### for category ablation
+from utils.make_train_datas_3w import make_train_datas
+from utils.make_test_datas_3w import make_test_datas
 from utils.time_split_batch import split_train_graph
 from utils.ns_indexing import ns_indexing
 from utils.EarlyStopping import EarlyStopping
@@ -58,9 +40,6 @@ random_seed = Config.seed
 random.seed(random_seed)
 np.random.seed(random_seed); torch.manual_seed(random_seed)
 if torch.cuda.is_available(): torch.cuda.manual_seed_all(random_seed)
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
-
 
 def main():
     # 0) device 및 batch_size 설정
@@ -70,8 +49,13 @@ def main():
     ### window size에 따른 snapshots 수 계산
     interval_minutes = Config.interval_minutes
     interval_hours = interval_minutes / 60
-    snapshot_weeks = 6/7#18/7   ### history + train
+    snapshot_weeks = 18/7#18/7   ### history + train
     snapshots_num = int(snapshot_weeks * 7 * 24 / interval_hours)   # 2016
+    if 15*24 % 48 == 0:
+        pass
+    else:
+        plus = True
+        snapshots_num += 1
     print("snapshots_num:", snapshots_num)
     # device = torch.device("cpu")
 
@@ -90,7 +74,8 @@ def main():
     g, splitted_g = split_train_graph(
         snapshot_weeks,
         interval_hours, 
-        f'psj/Adressa_1w/datas/total_graph_full_reciprocal_{interval_minutes}m.bin'
+        f'psj/Adressa_3w/datas/total_graph_full_reciprocal_{interval_minutes}m.bin',
+        plus
     )
     # print(g.number_of_nodes())
     # exit()
@@ -118,16 +103,16 @@ def main():
     file_path: 사용할 데이터로 수정
     criteria time 변경
     
-    <df에 존재하는 뉴스들만 포함하도록 combined_news_df를 바꾸는 코드>
+    <df에 존재하는 뉴스들만 포함하도록 combined_news_df를 바꾸는 코드> ----------------------최종: df는 main에서 아예 안 쓰임
     - 이게 필요한지 고민
     -- news2int를 기존 그대로 사용했기 때문에, user를 제외한 모든 이런 정보들은 그대로 두는 것이 좋아보임
     clicked_news_ids = df['clicked_news'].unique()
     combined_news_df = combined_news_df[combined_news_df['clicked_news'].isin(clicked_news_ids)].reset_index(drop=True)
     """
-    file_path = 'psj/Adressa_1w/datas/1w_behaviors.tsv'
+    file_path = 'psj/Adressa_3w/datas/3w_behaviors.tsv'
     df = pd.read_csv(file_path, sep='\t', encoding='utf-8')
     criteria_time1 = pd.Timestamp('2017-01-05 00:00:00')
-    criteria_time2 = pd.Timestamp('2017-01-12 00:00:00')
+    criteria_time2 = pd.Timestamp('2017-01-26 00:00:00')
     df['click_time'] = pd.to_datetime(df['click_time'])
     df = df[(criteria_time1 <= df['click_time']) & (df['click_time'] < criteria_time2)]
     
@@ -137,13 +122,13 @@ def main():
     # 3개의 df를 합치기 (ignore_index=True로 인덱스 재설정) - 모든 뉴스 고려
     # 전체 뉴스 정보 로드
     combined_news_df = pd.read_csv(
-        'psj/Adressa_1w/datas/all_news.tsv',   # _nyheter_splitted
+        'psj/Adressa_3w/datas/all_news.tsv',   # _nyheter_splitted
         sep='\t'
     ).rename(columns={'newsId': 'clicked_news'})
     
-    all_news_ids = pd.read_csv('psj/Adressa_1w/datas/news2int.tsv', sep='\t')['news_id']
+    all_news_ids = pd.read_csv('psj/Adressa_3w/datas/news2int.tsv', sep='\t')['news_id']
     news_num = len(all_news_ids)
-    user2int_df = pd.read_csv(os.path.join('psj/Adressa_1w/datas/', 'user2int.tsv'), sep='\t')
+    user2int_df = pd.read_csv(os.path.join('psj/Adressa_3w/datas/', 'user2int.tsv'), sep='\t')
     user_num = len(user2int_df['user_int'])
     all_users = [i for i in range(user_num)]
     
@@ -162,7 +147,7 @@ def main():
     )
     
     # category, subcategory -> index
-    category2int = pd.read_csv('psj/Adressa_1w/datas/category2int.tsv', sep='\t')   # _nyheter_splitted_for_NE    
+    category2int = pd.read_csv('psj/Adressa_3w/datas/category2int.tsv', sep='\t')   # _nyheter_splitted_for_NE    
     cat_num = Config.num_categories
     
     # category와 subcategory 매핑 딕셔너리 생성
@@ -194,7 +179,7 @@ def main():
 
 
     ### Loading idx_infos for calculating NLL loss
-    train_ns_idx_batch, _ = ns_indexing('psj/Adressa_1w/train/train_ns.tsv', original_batch_size, user_num=user_num)
+    train_ns_idx_batch, _ = ns_indexing('psj/Adressa_3w/train/train_ns.tsv', original_batch_size, user_num=user_num)
     # train_user_idx_batch = torch.load('./psj/Adressa_4w/train/train_user_idx_batch.pt')   # 사실 얘는 필요 없음...
 
     
@@ -206,7 +191,7 @@ def main():
     """
     test_datas = make_test_datas(snapshots_num=snapshots_num)
     test_news, test_time, test_empty_check = zip(*test_datas)
-    test_ns_idx_batch, test_cand_score_weight_batch = ns_indexing('psj/Adressa_1w/test/test_ns.tsv', original_batch_size, user_num=user_num, test=True)
+    test_ns_idx_batch, test_cand_score_weight_batch, test_cand_remaining_lifetime_batch = ns_indexing('psj/Adressa_3w/test/test_ns_comparison.tsv', original_batch_size, user_num=user_num, test=True)
     
     # with open('./psj/Adressa_4w/test/test_datas.pkl', 'rb') as f:
     #     datas = pickle.load(f)
@@ -227,7 +212,7 @@ def main():
     # snapshots_num = snapshot_weeks * 7 * 24 * 2   # 2016
 
     # wandb 초기화 및 config 설정
-    wandb.init(project="TKG_for_NewsRec_1w", config={
+    wandb.init(project="TKG_for_NewsRec_3w", config={
         "learning_rate": learning_rate,
         "num_epochs": num_epochs,
         "batch_size": original_batch_size,
@@ -237,7 +222,6 @@ def main():
         "snapshots_num": snapshots_num,
     }, name=f"{int(snapshot_weeks) + 1}w Adressa_method_{Config.method}_score adjust_{Config.adjust_score}_batch size {original_batch_size}_seed {random_seed}")
     
-    # 3) 모델 초기화
     if not Config.unique_category:
         model = GCRNN(
             all_news_ids,
@@ -263,15 +247,6 @@ def main():
             batch_size=batch_size,
             snapshots_num=snapshots_num
         ).to(device=device)
-    
-    # # 1) cat_embedding_layer 파라미터
-    # cat_params = list(model.cat_embedding_layer.parameters())
-    # # 2) 그 외 모든 파라미터
-    # other_params = [p for n, p in model.named_parameters() if "cat_embedding_layer" not in n]
-    # optimizer = torch.optim.Adam([
-    #     {'params': other_params, 'lr': learning_rate},
-    #     {'params': cat_params,   'lr': learning_rate*10},
-    # ], weight_decay=0.01)
     optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate, weight_decay=0.01)   
     
     # 모델 파라미터 및 그라디언트 로깅 설정 (옵션)
@@ -293,7 +268,7 @@ def main():
         emb_dim=emb_dim,      # emb_dim 등 모델 설정에 맞춰 전달
         patience=3,           # 개선 없으면 5epoch 후 스탑(예시)
         min_delta=1e-4,
-        ckpt_dir=f'psj/Adressa_1w/1_hop_ckpt/bs_{original_batch_size}_lr_{learning_rate}_seed_{random_seed}', 
+        ckpt_dir=f'psj/Adressa_3w/1_hop_ckpt/bs_{original_batch_size}_lr_{learning_rate}_seed_{random_seed}', 
         verbose=True,
         save_all=False        # True로 설정하면 매 epoch마다 체크포인트 저장
     )
@@ -306,7 +281,6 @@ def main():
           f"snapshots_num: {snapshots_num}",
           f"# of hops: {Config.hop}\n")
     
-    torch.autograd.set_detect_anomaly(True)
     for epoch in range(1, num_epochs+1):
         model.train()
         epoch_loss_sum = 0.0
@@ -314,7 +288,7 @@ def main():
         prev_batch_cnt = 0
         batch_cnt = 0
         batch_size = original_batch_size
-        for b in tqdm(range(batch_num), desc=f'training {epoch} epoch batches'):
+        for b in tqdm(range(batch_num), ncols=60, desc=f'training {epoch} epoch batches'):
             prev_batch_cnt = batch_cnt
             batch_cnt += batch_size
             # prev_batch = b * batch_size
@@ -339,39 +313,7 @@ def main():
                 train_ns_idx_batch[b],
                 history_length
             )
-            loss.backward()   # calculate gradient    
-            
-            # --- gradient 확인 코드 시작 ---
-            # if b <= 5:
-            #     total_norm = 0.0
-            #     for name, param in model.named_parameters():
-            #         if 'user_embedding_layer.weight' in name:
-            #             param.register_hook(lambda g, n=name: print(f"{n} grad norm =", g.norm()))        
-                
-            #         if param.grad is not None:
-            #             # L2 노름 계산
-            #             grad_norm = param.grad.data.norm(2).item()
-            #             total_norm += grad_norm ** 2
-            #             print(f"[Grad] {name:40s} | norm: {grad_norm:.6f}")
-                # total_norm = total_norm ** 0.5
-                # print(f"[Grad] 전체 gradient L2 norm: {total_norm:.6f}")
-                # # wandb에 로깅
-                # wandb.log({"grad_norm": total_norm}, step=epoch)
-                # print(f"user embedding layer: {model.user_embedding_layer.weight[:10]}")
-                # print(f"c0_embedding_layer_u: {model.c0_embedding_layer_u.weight[:10]}")
-                # print(f"user_cn: {model.user_cn[:10]}")
-                # print(f"user_hn: {model.user_hn[:10]}")
-                # print(f"user_cn: {model.user_cn[:10]}")
-                
-                # print()
-                # # user embedding, c0 embedding 파라미터 grad 확인
-                # ue_grad = model.user_embedding_layer.weight.grad   # (user_num, emb_dim)
-                # c0_grad = model.c0_embedding_layer_u.weight.grad   # (user_num+news_num, emb_dim)
-                # print("user_embedding_layer grad norm:", ue_grad.norm().item())
-                # print("c0_embedding_layer_u grad norm:", c0_grad.norm().item())
-            # print(model.cat_embedding_layer.weight)
-            # print(model.cat_embedding_layer.weight.grad)
-            # --- gradient 확인 코드 끝 ---
+            loss.backward()   # calculate gradient          
             optimizer.step()   # update parameter via calculated gradient
             optimizer.zero_grad()   # initialize gradient
             
@@ -403,11 +345,12 @@ def main():
             list_mrr = []
             list_ndcg5 = []
             list_ndcg10 = []
+            top1_lifetimes = []   ### top1 item의 남은 수명 저장
             prev_test_batch_cnt = 0
             test_batch_cnt = 0
             empty_batch_count = 0
 
-            for test_b in tqdm(range(test_batch_num), desc=f'Testing Epoch {epoch}', miniters=5, leave=False):
+            for test_b in tqdm(range(test_batch_num), desc=f'Testing Epoch {epoch}', miniters=5, ncols=60, leave=False):
                 prev_test_batch_cnt = test_batch_cnt
                 test_batch_cnt += original_batch_size
                 if test_batch_cnt > len(test_news):
@@ -432,12 +375,18 @@ def main():
                 candidate_score = candidate_score.cpu().numpy()
                 if Config.adjust_score:
                     test_cand_score_weight = np.array(test_cand_score_weight_batch[test_b])
+                    test_cand_remaining_lifetime = np.array(test_cand_remaining_lifetime_batch[test_b])
                     assert candidate_score.shape == test_cand_score_weight.shape
+                    assert candidate_score.shape == test_cand_remaining_lifetime.shape
                 for i in range(candidate_score.shape[0]):
                     y_score = candidate_score[i]
+                    lifetime = test_cand_remaining_lifetime[i]
                     ### 수명 고려한 스코어 조정
                     if Config.adjust_score:
                         y_score = y_score*test_cand_score_weight[i]
+                    top1_idx = y_score.argmax()
+                    ### top1 recommended item의 남은 수명 저장
+                    top1_lifetimes.append(lifetime[top1_idx])
                     # 첫 번째가 정답
                     y_true = np.zeros(len(y_score), dtype=int)
                     y_true[0] = 1
@@ -486,6 +435,12 @@ def main():
                 best_mrr = final_mrr
                 best_ndcg5 = final_ndcg5
                 best_ndcg10 = final_ndcg10
+                ### ablation에 필요한 수명 저장
+                save_dir = pl.Path('psj/Adressa_1w/results/lifetime_ablation')
+                save_dir.mkdir(parents=True, exist_ok=True)
+                np.save(save_dir / f'top1_epoch{epoch}_seed{random_seed}.npy',
+                        np.asarray(top1_lifetimes, dtype=np.float32))
+                print(f'[lifetime_ablation] top1_lifetimes 저장 → {save_dir}/top1_epoch{epoch}_seed{random_seed}.npy')
 
             if early_stopper.early_stop:
                 print("[EarlyStopping] Training is stopped.")

@@ -8,20 +8,39 @@ import datetime
 from tqdm import tqdm
 from dgl.data.utils import save_graphs
 
-interval_minutes = [30, 720, 1440, 2160]
+interval_minutes = [2880]   # [30, 720, 1440, 2160]
 
 for interval_minute in interval_minutes:
-    # (1) 30분 단위 구간 계산 함수 (코드1의 get_period_start와 동일/유사)
-    def get_period_start(click_time, interval_minutes, start_time=datetime.time(0, 0, 0)):
-        """
-        2.1) 클릭 시간이 속하는 기간의 시작 시간을 계산
-        """
-        base_start = datetime.datetime.combine(click_time.date(), start_time)
-        if click_time < base_start:
-            base_start -= datetime.timedelta(days=1)
-        delta = click_time - base_start
-        periods = int(delta.total_seconds() // (interval_minutes * 60))
-        return base_start + datetime.timedelta(minutes=interval_minutes * periods)
+    # # (1) 30분 단위 구간 계산 함수 (코드1의 get_period_start와 동일/유사)
+    # def get_period_start(click_time, interval_minutes, start_time=datetime.time(0, 0, 0)):
+    #     """
+    #     2.1) 클릭 시간이 속하는 기간의 시작 시간을 계산
+    #     """
+    #     base_start = datetime.datetime.combine(click_time.date(), start_time)
+    #     if click_time < base_start:
+    #         base_start -= datetime.timedelta(days=1)
+    #     delta = click_time - base_start
+    #     periods = int(delta.total_seconds() // (interval_minutes * 60))
+    #     return base_start + datetime.timedelta(minutes=interval_minutes * periods)
+    
+    criteria_time1 = pd.Timestamp('2017-01-05 00:00:00')
+    criteria_time2 = pd.Timestamp('2017-01-23 00:00:00')
+    history_end_time = pd.Timestamp('2017-01-20 00:00:00')
+    
+    def get_period_start(click_time, interval_minute, base_time):
+        """base_time을 기준으로 click_time이 속하는 window 시작 시점 계산"""
+        delta = click_time - base_time
+        periods = int(delta.total_seconds() // (interval_minute * 60))
+        return base_time + pd.Timedelta(minutes=interval_minute * periods)
+    
+    # 두 구간(history / train)을 나눠서 period_start 결정
+    def compute_period_start(click_time):
+        if click_time < history_end_time:
+            # 구간1: test
+            return get_period_start(click_time, interval_minute, criteria_time1)
+        else:
+            # 구간2: train
+            return get_period_start(click_time, interval_minute, history_end_time)
 
 
     # (2) 데이터 로드
@@ -32,19 +51,18 @@ for interval_minute in interval_minutes:
     # click_time을 string에서 datetime으로 변환
     df['click_time'] = pd.to_datetime(df['click_time'])
 
-    criteria_time1 = pd.Timestamp('2017-01-05 00:00:00')
-    criteria_time2 = pd.Timestamp('2017-01-23 00:00:00')
     df = df[(criteria_time1 <= df['click_time']) & (df['click_time'] < criteria_time2)]
 
 
     # (2-1) 30분 단위 구간열(Period_Start) 생성
-    df['Period_Start'] = df['click_time'].apply(lambda x: get_period_start(x, interval_minutes=interval_minute))
+    # df['Period_Start'] = df['click_time'].apply(lambda x: get_period_start(x, interval_minutes=interval_minute))
+    df['Period_Start'] = df['click_time'].apply(compute_period_start)
     # period_start -> time_idx 매핑(0부터 시작)
     unique_period_starts = df['Period_Start'].unique()
     time_dict = {ps: i for i, ps in enumerate(sorted(unique_period_starts))}
     df['time_idx'] = df['Period_Start'].map(time_dict)
-    # print(df)
-    # exit()
+    # print(df.head())
+    # print(time_dict)
     # print(len(df[df['time_idx'] == 28]))
     # exit()
 

@@ -66,6 +66,7 @@ class GCRNN(nn.Module):
         self.user_num = user_num
         self.cat_num = cat_num
         self.news_num = news_num
+        self.unique_category = config.unique_category
         # self.prev_hn = nn.Embedding(num_embeddings=user_num, embedding_dim=emb_dim, sparse = False).to(self.device)   # for hidden state in LSTM_GCN
         self.c0_embedding_layer_u = nn.Embedding(num_embeddings=user_num+news_num, embedding_dim=emb_dim, sparse = False).to(self.device)   # for cell state in LSTM_GCN
         self.user_RNN = nn.LSTMCell(emb_dim, emb_dim, bias = True).to(self.device)   # input dim, hn dim
@@ -171,11 +172,11 @@ class GCRNN(nn.Module):
     def lgcn_message_func(self, edges):
         # deg 정규화 1/√(deg_u * deg_v)
         coefficient = torch.rsqrt(edges.src['deg'] * edges.dst['deg']).unsqueeze(1)
-        if not self.use_cat_emb:
+        if not self.unique_category:
             cat_embedding = self.rel_embedding[edges.data['cat_idx'].type(torch.LongTensor).to(self.device)]
-            msg = edges.src['h'] * cat_embedding * coefficient  # 관계별 가중치(선택)
         else:
-            msg = edges.src['h'] * coefficient
+            cat_embedding = self.rel_embedding[0]
+        msg = edges.src['h'] * cat_embedding * coefficient
         return {'msg': msg}
     
     def lgcn_reduce_func(self, nodes):
@@ -347,8 +348,10 @@ class GCRNN(nn.Module):
             except:
                 pass
         
-        self.rel_embedding = self.cat_embedding_layer(torch.tensor(range(self.cat_num)).to(self.device))
-        # # 초기화해줘야 밑에서 슬라이싱 가능
+        if not self.unique_category:
+            self.rel_embedding = self.cat_embedding_layer(torch.tensor(range(self.cat_num)).to(self.device))
+        else:
+            self.rel_embedding = self.cat_embedding_layer(torch.tensor([0], device=self.device))        # # 초기화해줘야 밑에서 슬라이싱 가능
         # g.ndata['node_emb'] = torch.zeros(g.number_of_nodes(), self.emb_dim, device=self.device)
         user_embeddings = self.user_embedding_layer(torch.tensor(range(self.user_num)).to(self.device))
         news_embeddings = self.News_Encoder(self.all_news_ids)
@@ -359,7 +362,6 @@ class GCRNN(nn.Module):
         entity_index = []
         
         # LightGCN 옵션
-        self.use_cat_emb = self.config.unique_category  # 카테고리 임베딩을 쓰려면 True
         self._init_lightgcn(K=self.config.hop)  # K 층, α 기본값
         
         # register함수는 DGL 0.9이상에서는 없어졌다.

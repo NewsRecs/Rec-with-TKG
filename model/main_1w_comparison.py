@@ -24,11 +24,12 @@ import torch
 import pickle  
 import os
 from tqdm import tqdm
+import pathlib as pl
 import pandas as pd
 import numpy as np
 import time
 import random
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 from model.config_1w import Config
 if Config.hop == 1:
     from model.GCRNN import GCRNN
@@ -206,7 +207,7 @@ def main():
     """
     test_datas = make_test_datas(snapshots_num=snapshots_num)
     test_news, test_time, test_empty_check = zip(*test_datas)
-    test_ns_idx_batch, test_cand_score_weight_batch = ns_indexing('psj/Adressa_1w/test/test_ns.tsv', original_batch_size, user_num=user_num, test=True)
+    test_ns_idx_batch, test_cand_score_weight_batch, test_cand_remaining_lifetime_batch = ns_indexing('psj/Adressa_1w/test/test_ns_comparison.tsv', original_batch_size, user_num=user_num, test=True)
     
     # with open('./psj/Adressa_4w/test/test_datas.pkl', 'rb') as f:
     #     datas = pickle.load(f)
@@ -403,6 +404,7 @@ def main():
             list_mrr = []
             list_ndcg5 = []
             list_ndcg10 = []
+            top1_lifetimes = []   ### top1 item의 남은 수명 저장
             prev_test_batch_cnt = 0
             test_batch_cnt = 0
             empty_batch_count = 0
@@ -433,11 +435,17 @@ def main():
                 if Config.adjust_score:
                     test_cand_score_weight = np.array(test_cand_score_weight_batch[test_b])
                     assert candidate_score.shape == test_cand_score_weight.shape
+                test_cand_remaining_lifetime = np.array(test_cand_remaining_lifetime_batch[test_b])
+                assert candidate_score.shape == test_cand_remaining_lifetime.shape
                 for i in range(candidate_score.shape[0]):
                     y_score = candidate_score[i]
+                    lifetime = test_cand_remaining_lifetime[i]
                     ### 수명 고려한 스코어 조정
                     if Config.adjust_score:
                         y_score = y_score*test_cand_score_weight[i]
+                    top1_idx = y_score.argmax()
+                    ### top1 recommended item의 남은 수명 저장
+                    top1_lifetimes.append(lifetime[top1_idx])
                     # 첫 번째가 정답
                     y_true = np.zeros(len(y_score), dtype=int)
                     y_true[0] = 1
@@ -486,14 +494,28 @@ def main():
                 best_mrr = final_mrr
                 best_ndcg5 = final_ndcg5
                 best_ndcg10 = final_ndcg10
-
+                save = True   ##### 수정 요망
+                if save:
+                    ### ablation에 필요한 수명 저장
+                    save_dir = pl.Path(f'psj/Adressa_1w/results/lifetime_ablation/seed{random_seed}')
+                    if Config.adjust_score:
+                        save_path = save_dir / f'top1_epoch{epoch}_seed{random_seed}.npy'
+                    else:
+                        save_path = save_dir / f'top1_epoch{epoch}_seed{random_seed}_wo_as.npy'
+                    save_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    np.save(save_path,
+                            np.asarray(top1_lifetimes, dtype=np.float32))
+                    print(f'[lifetime_ablation] top1_lifetimes 저장 → {save_path}')
+                
             if early_stopper.early_stop:
                 print("[EarlyStopping] Training is stopped.")
                 break  # epoch 루프 종료
-
+        
+            
         if early_stopper.early_stop:
             break  # 메인 학습 루프 종료
-
+        
     # -----------------------------
     # 전체 epoch 종료 or early stop 후,
     # 베스트 모델 다시 로드해서 최종 결과 출력

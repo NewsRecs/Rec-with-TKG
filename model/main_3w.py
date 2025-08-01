@@ -17,7 +17,10 @@ if Config.hop == 1:
 elif Config.hop == 2:
     from model.GCRNN_for_2hop_ver2 import GCRNN
 else:
-    from model.GCRNN_for_3hop import GCRNN    
+    if not Config.unique_category:
+        from model.GCRNN_for_3hop import GCRNN
+    else:
+        from model.GCRNN_for_3hop_ver2 import GCRNN   ### for category ablation
 from utils.make_train_datas_3w import make_train_datas
 from utils.make_test_datas_3w import make_test_datas
 from utils.time_split_batch import split_train_graph
@@ -48,6 +51,11 @@ def main():
     interval_hours = interval_minutes / 60
     snapshot_weeks = 18/7#18/7   ### history + train
     snapshots_num = int(snapshot_weeks * 7 * 24 / interval_hours)   # 2016
+    if 15*24 % 48 == 0:
+        pass
+    else:
+        plus = True
+        snapshots_num += 1
     print("snapshots_num:", snapshots_num)
     # device = torch.device("cpu")
 
@@ -66,7 +74,8 @@ def main():
     g, splitted_g = split_train_graph(
         snapshot_weeks,
         interval_hours, 
-        f'psj/Adressa_3w/datas/total_graph_full_reciprocal_{interval_minutes}m.bin'
+        f'psj/Adressa_3w/datas/total_graph_full_reciprocal_{interval_minutes}m.bin',
+        plus
     )
     # print(g.number_of_nodes())
     # exit()
@@ -213,19 +222,31 @@ def main():
         "snapshots_num": snapshots_num,
     }, name=f"{int(snapshot_weeks) + 1}w Adressa_method_{Config.method}_score adjust_{Config.adjust_score}_batch size {original_batch_size}_seed {random_seed}")
     
-    # 3) 모델 초기화
-    model = GCRNN(
-        all_news_ids,
-        news_id_to_info,
-        user_num,
-        cat_num,
-        news_num,
-        pretrained_word_embedding=pretrained_word_embedding,
-        emb_dim=emb_dim,
-        batch_size=batch_size,
-        snapshots_num=snapshots_num,
-        config=Config
-    )    
+    if not Config.unique_category:
+        model = GCRNN(
+            all_news_ids,
+            news_id_to_info,
+            user_num,
+            cat_num,
+            news_num,
+            pretrained_word_embedding=pretrained_word_embedding,
+            emb_dim=emb_dim,
+            batch_size=batch_size,
+            snapshots_num=snapshots_num,
+            config=Config
+        ).to(device=device)
+    else:
+        model = GCRNN(
+            all_news_ids,
+            news_id_to_info,
+            user_num,
+            cat_num,
+            news_num,
+            pretrained_word_embedding=pretrained_word_embedding,
+            emb_dim=emb_dim,
+            batch_size=batch_size,
+            snapshots_num=snapshots_num
+        ).to(device=device)
     optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate, weight_decay=0.01)   
     
     # 모델 파라미터 및 그라디언트 로깅 설정 (옵션)

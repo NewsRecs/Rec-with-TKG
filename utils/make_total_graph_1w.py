@@ -8,7 +8,7 @@ import datetime
 from tqdm import tqdm
 from dgl.data.utils import save_graphs
 
-interval_minutes = [30, 720, 1440, 2160]
+interval_minutes = [2880]   # [30, 720, 1440, 2160]
 
 for interval_minute in interval_minutes:
     # (1) 30분 단위 구간 계산 함수 (코드1의 get_period_start와 동일/유사)

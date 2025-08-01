@@ -38,3 +38,5 @@ class Config:
     unique_category = os.getenv("UNIQUE_CATEGORY", "False").lower() in ("true","1","yes")
     # 수명 고려한 스코어 조정
     adjust_score = os.getenv("ADJUST_SCORE", "False").lower() in ("true","1","yes")
+    # GRNN 제외 여부
+    use_grnn = os.getenv("USE_GRNN", "False").lower() in ("true","1","yes")

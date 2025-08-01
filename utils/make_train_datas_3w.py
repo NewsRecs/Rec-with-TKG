@@ -32,6 +32,7 @@ def make_train_datas(interval_minutes, week = 3):
     
     criteria_time1 = pd.Timestamp('2017-01-05 00:00:00')
     criteria_time2 = pd.Timestamp('2017-01-23 00:00:00')
+    history_end_time = pd.Timestamp('2017-01-20 00:00:00')
     train_df = df[(criteria_time1 <= df['click_time']) & (df['click_time'] < criteria_time2)]
     
     # train_df에서 nan이 존재하는 행 제거
@@ -100,8 +101,10 @@ def make_train_datas(interval_minutes, week = 3):
     time_dict = {ps: i for i, ps in enumerate(sorted(unique_period_starts))}
     train_df['time_idx'] = train_df['Period_Start'].map(time_dict)
     train_df = train_df[train_df['time_idx'] >= his_snapshots_num]
+    print()
     print(train_df['time_idx'].max())
-
+    print()
+    
     """
     train_news: 각 요소(리스트)는 train data에서 각 유저가 클릭한 news_ids
     - shape: (user_num, train data에서 각 유저의 클릭 수)

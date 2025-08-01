@@ -27,6 +27,7 @@ def ns_indexing(ns_file_path, batch_size, user_num=84989, test=False):
     # ns에 필요한 데이터 저장하는 변수들
     ns_idx_batch = []
     test_cand_score_weight_batch = []
+    test_cand_remaining_lifetime_batch = []
     b_num = 0
     for b in range(batch_num):
         # b_num += 1
@@ -47,6 +48,7 @@ def ns_indexing(ns_file_path, batch_size, user_num=84989, test=False):
         # negative samples 포함한 news_idx 처리
         ns_idx_list = []
         test_cand_weight_list = []
+        test_cand_remaining_lifetime_list = []
         for _, row in batch_ns_df.iterrows():
             # positive 뉴스 id (이미 news2int 매핑된 정수값)
             pos = int(row['news_int'])
@@ -57,6 +59,14 @@ def ns_indexing(ns_file_path, batch_size, user_num=84989, test=False):
             neg_list = [int(x) for x in neg_str.split()]
             negs = neg_list
             ns_idx_list.append([pos] + negs)
+            
+            if test:
+                ### score weight 추가
+                candidate_remaining_lifetime_str = row['remaining_lifetime']
+                # 각 요소를 float로 변환
+                candidate_remaining_lifetime_list = [float(x) for x in candidate_remaining_lifetime_str.split()]
+                test_cand_remaining_lifetime_list.append(candidate_remaining_lifetime_list)
+                
             if test and Config.adjust_score:
                 ### score weight 추가
                 candidate_weight_str = row['candidate_weight']
@@ -67,7 +77,12 @@ def ns_indexing(ns_file_path, batch_size, user_num=84989, test=False):
         # 리스트를 텐서로 변환 (shape: [row_num, 5])
         ns_idx_tensor = torch.tensor(ns_idx_list, dtype=torch.long)
         ns_idx_batch.append(ns_idx_tensor)
+        if test:
+            test_cand_remaining_lifetime_batch.append(test_cand_remaining_lifetime_list)
+        if test and Config.adjust_score:
+            test_cand_score_weight_batch.append(test_cand_weight_list)
         
-        test_cand_score_weight_batch.append(test_cand_weight_list)
-    
-    return ns_idx_batch, test_cand_score_weight_batch#, user_idx_batch
+    if not test:
+        return ns_idx_batch, test_cand_score_weight_batch
+    else:
+        return ns_idx_batch, test_cand_score_weight_batch, test_cand_remaining_lifetime_batch#, user_idx_batch

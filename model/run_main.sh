@@ -6,11 +6,11 @@ HOP=2
 INTERVAL_MINUTES=30
 BATCH_SIZE=300
 METHOD='multihead_self_attention'   # 'cnn_attention''multihead_self_attention'
-NO_CATEGORY=True
+NO_CATEGORY=False
 UNIQUE_CATEGORY=False
 ADJUST_SCORE=True
 
-for SEED in 2025; do # 64 2025 1024 42 256
+for SEED in 2025 1024 42 256; do # 64 2025 1024 42 256
     echo ">>> Running with SEED=$SEED, BATCH_SIZE=$BATCH_SIZE, GPU_NUM=$GPU_NUM, HOP=$HOP, INTERVAL_MINUTES=$INTERVAL_MINUTES, METHOD=$METHOD, NO_CATEGORY=$NO_CATEGORY, UNIQUE_CATEGORY=$UNIQUE_CATEGORY, ADJUST_SCORE=$ADJUST_SCORE"
     
     env \
@@ -23,5 +23,5 @@ for SEED in 2025; do # 64 2025 1024 42 256
     NO_CATEGORY=$NO_CATEGORY \
     UNIQUE_CATEGORY=$UNIQUE_CATEGORY \
     ADJUST_SCORE=$ADJUST_SCORE \
-    python Rec-with-TKG/model/main_1w.py
+    python Rec-with-TKG/model/main_1w_comparison.py
 done

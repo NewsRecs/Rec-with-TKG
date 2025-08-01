@@ -8,7 +8,7 @@ import gc
 import random
 from utils.nce_loss import NCELoss
 
-from model.config import Config
+from model.config_1w import Config
 if Config.method == 'cnn_attention':
     if Config.no_category:
         from utils.title_news_encoder import NewsEncoder
@@ -87,6 +87,7 @@ class GCRNN(nn.Module):
         self.news_encoder = NewsEncoder(self.config, self.pretrained_word_embedding).to(self.device)
         self.all_news_ids = all_news_ids   # news_int 순서대로 id 저장됨
         self.news_id_to_info = news_id_to_info
+        self.unique_category = Config.unique_category
         
         
     # def News_Encoder(self, news_ids):
@@ -169,7 +170,12 @@ class GCRNN(nn.Module):
     
     def message_func(self, edges):
         # 엣지 메시지는 뉴스 임베딩과 엣지 임베딩의 element-wise product
-        return {'msg': edges.src['node_emb'] * self.rel_embedding[edges.data['cat_idx'].type(torch.LongTensor)]}
+        if not self.unique_category:
+            cat_embedding = self.rel_embedding[edges.data['cat_idx'].type(torch.LongTensor)]
+        else:
+            cat_embedding = self.rel_embedding[0]
+        return {'msg': edges.src['node_emb'] * cat_embedding}
+#        return {'msg': edges.src['node_emb'] * self.rel_embedding[edges.data['cat_idx'].type(torch.LongTensor)]}
 
     def reduce_func(self, nodes):
         # 메시지를 상수 c로 나눈 뒤, 기존 임베딩과 더해줌 (residual)
@@ -272,8 +278,12 @@ class GCRNN(nn.Module):
                 future_needed_nodes = future_needed_nodes - set(np.where(check_lifetime==0)[0]) # seed next
             except:
                 pass
-        
-        self.rel_embedding = self.cat_embedding_layer(torch.tensor(range(self.cat_num)).to(self.device))
+            
+        if not self.unique_category:
+            self.rel_embedding = self.cat_embedding_layer(torch.tensor(range(self.cat_num)).to(self.device))
+        else:
+            self.rel_embedding = self.cat_embedding_layer(torch.tensor([0], device=self.device))
+        # self.rel_embedding = self.cat_embedding_layer(torch.tensor(range(self.cat_num)).to(self.device))
         # 초기화해줘야 밑에서 슬라이싱 가능
         g.ndata['node_emb'] = torch.zeros(g.number_of_nodes(), self.emb_dim, device=self.device)
         g.ndata['node_emb'][:self.user_num] = self.user_embedding_layer(torch.tensor(range(self.user_num)).to(self.device))
