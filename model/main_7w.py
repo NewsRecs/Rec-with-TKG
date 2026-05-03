@@ -363,19 +363,21 @@ def main():
                     y_true = np.zeros(len(y_score), dtype=int)
                     y_true[0] = 1
 
-                    all_scores.extend(y_score)
-                    all_labels.extend(y_true)
+                    # all_scores.extend(y_score)
+                    # all_labels.extend(y_true)
 
+                    list_auc.append(roc_auc_score(y_true, y_score))
                     list_mrr.append(mrr_score(y_true, y_score))
                     list_ndcg5.append(ndcg_score(y_true, y_score, k=5))
                     list_ndcg10.append(ndcg_score(y_true, y_score, k=10))
 
             # Test Metrics 계산
-            if len(set(all_labels)) > 1:
-                final_auc = roc_auc_score(all_labels, all_scores)
-            else:
-                final_auc = 0.0  # all_labels가 전부 1이거나 전부 0이면 AUC 계산 불가
-
+            
+            # if len(set(all_labels)) > 1:
+            #     final_auc = roc_auc_score(all_labels, all_scores)
+            # else:
+            #     final_auc = 0.0  # all_labels가 전부 1이거나 전부 0이면 AUC 계산 불가
+            final_auc = np.mean(list_auc) if list_auc else 0.0
             final_mrr = np.mean(list_mrr) if list_mrr else 0.0
             final_ndcg5 = np.mean(list_ndcg5) if list_ndcg5 else 0.0
             final_ndcg10 = np.mean(list_ndcg10) if list_ndcg10 else 0.0
